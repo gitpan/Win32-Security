@@ -1,0 +1,11 @@
+<SOFTPKG NAME="Win32-Security" VERSION="0,50,0,0">
+    <TITLE>Win32-Security</TITLE>
+    <ABSTRACT>Security manipulation for named objects</ABSTRACT>
+    <AUTHOR>Toby Ovod-Everett, toby@ovod-everett.org</AUTHOR>
+    <IMPLEMENTATION>
+        <DEPENDENCY NAME="Class-Prototyped" VERSION="0,98,0,0" />
+        <DEPENDENCY NAME="Data-BitMask" VERSION="0,13,0,0" />
+        <DEPENDENCY NAME="Win32-API" VERSION="0,0,0,0" />
+        <CODEBASE HREF="MSWin32-x86-multi-thread/Win32-Security-0.50.tar.gz" />
+    </IMPLEMENTATION>
+</SOFTPKG>
