@@ -20,7 +20,7 @@ $Data::Dumper::Sortkeys = 1;
 $Data::Dumper::Sortkeys = 1; #Repeated to avoid warnings
 
 
-($ENV{USERDOMAIN} ne '' && $ENV{USERNAME} ne '') or die "namedobject.t requires the environment variables USERDOMAIN and USERNAME.  Testing has halted.\n";
+($ENV{USERDOMAIN} ne '' && $ENV{USERNAME} ne '') or die "$0 requires the environment variables USERDOMAIN and USERNAME.  Testing has halted.\n";
 
 my $username = Win32::Security::SID::ConvertSidToName(Win32::Security::SID::ConvertNameToSid("$ENV{USERDOMAIN}\\$ENV{USERNAME}")); # Cleanup capitalization
 
@@ -33,23 +33,30 @@ my $guest = Win32::Security::SID::ConvertSidToName(Win32::Security::SID::Convert
 my $system = Win32::Security::SID::ConvertSidToName(Win32::Security::SID::ConvertNameToSid('S-1-5-18')); # 'NT AUTHORITY\\SYSTEM' localization
 
 
-`cacls.exe` =~ /Displays or modifies access control lists/si or die "namedobject.t requires cacls.exe to function.  Unable to find cacls.exe so testing has halted.\n";
+`cacls.exe` =~ /Displays or modifies access control lists/si or die "$0 requires cacls.exe to function.  Unable to find cacls.exe so testing has halted.\n";
 
 my $script_dir;
 foreach my $inc (@INC) {
 	$inc =~ s/\//\\/g;
-	$inc .= '\\Win32\\Security';
-	if (-e "$inc\\PermChg.pl" && -e "$inc\\PermDump.pl" && -e "$inc\\PermFix.pl") {
-		$script_dir = $inc;
+
+	my $testinc = $inc.'\\Win32\\Security';
+	if (-e "$testinc\\PermChg.pl" && -e "$testinc\\PermDump.pl" && -e "$testinc\\PermFix.pl") {
+		$script_dir = $testinc;
+		last;
+	}
+
+	($testinc = $inc) =~ s/\\lib$/\\script/;
+	if (-e "$testinc\\PermChg.pl" && -e "$testinc\\PermDump.pl" && -e "$testinc\\PermFix.pl") {
+		$script_dir = $testinc;
 		last;
 	}
 }
-defined $script_dir or die "namedobject.t requires access to the Perm(Chg|Dump|Fix).pl scripts.  Unable to find them in \@INC so testing has halted.\n";
+defined $script_dir or die "$0 requires access to the Perm(Chg|Dump|Fix).pl scripts.  Unable to find them in \@INC so testing has halted.\n";
 
 my $tempdir = "$ENV{TEMP}\\Win32-Security_TestDir_$$";
--d $tempdir and die "namedobject.t requires a temp directory for testing.  The directory '$tempdir' already exists so testing has halted.\n";
+-d $tempdir and die "$0 requires a temp directory for testing.  The directory '$tempdir' already exists so testing has halted.\n";
 mkdir($tempdir, 0);
--d $tempdir or die "namedobject.t requires a temp directory for testing.  Unable to create the directory '$tempdir' so testing has halted.\n";
+-d $tempdir or die "$0 requires a temp directory for testing.  Unable to create the directory '$tempdir' so testing has halted.\n";
 
 eval {
 	#First we set the permissions on $tempdir
@@ -137,7 +144,7 @@ eval {
 my $err = $@;
 
 system("rd /s /q \"$ENV{TEMP}\\Win32-Security_TestDir_$$\"");
--d "$ENV{TEMP}\\Win32-Security_TestDir_$$" and die "namedobject.t used a temp directory for testing.  Unable to erase the directory '$tempdir' after testing was completed.\n";
+-d "$ENV{TEMP}\\Win32-Security_TestDir_$$" and die "$0 used a temp directory for testing.  Unable to erase the directory '$tempdir' after testing was completed.\n";
 
 die $err if $err ne '';
 

@@ -9,7 +9,7 @@ use vars qw($enabled);
 BEGIN {
 	$|++;
 	$enabled = 0; #Change this to 1 to enable the extended tests
-	plan tests => $enabled ? 347 : 1,
+	plan tests => $enabled ? 351 : 1,
 }
 if (!$enabled) {
 	ok(1);
@@ -20,7 +20,7 @@ $Data::Dumper::Sortkeys = 1;
 $Data::Dumper::Sortkeys = 1; #Repeated to avoid warnings
 
 
-($ENV{USERDOMAIN} ne '' && $ENV{USERNAME} ne '') or die "namedobject.t requires the environment variables USERDOMAIN and USERNAME.  Testing has halted.\n";
+($ENV{USERDOMAIN} ne '' && $ENV{USERNAME} ne '') or die "$0 requires the environment variables USERDOMAIN and USERNAME.  Testing has halted.\n";
 
 my $username = Win32::Security::SID::ConvertSidToName(Win32::Security::SID::ConvertNameToSid("$ENV{USERDOMAIN}\\$ENV{USERNAME}")); # Cleanup capitalization
 
@@ -34,23 +34,30 @@ my $system = Win32::Security::SID::ConvertSidToName(Win32::Security::SID::Conver
 
 
 
-`cacls.exe` =~ /Displays or modifies access control lists/si or die "namedobject.t requires cacls.exe to function.  Unable to find cacls.exe so testing has halted.\n";
+`cacls.exe` =~ /Displays or modifies access control lists/si or die "$0 requires cacls.exe to function.  Unable to find cacls.exe so testing has halted.\n";
 
 my $script_dir;
 foreach my $inc (@INC) {
 	$inc =~ s/\//\\/g;
-	$inc .= '\\Win32\\Security';
-	if (-e "$inc\\PermChg.pl" && -e "$inc\\PermDump.pl" && -e "$inc\\PermFix.pl") {
-		$script_dir = $inc;
+
+	my $testinc = $inc.'\\Win32\\Security';
+	if (-e "$testinc\\PermChg.pl" && -e "$testinc\\PermDump.pl" && -e "$testinc\\PermFix.pl") {
+		$script_dir = $testinc;
+		last;
+	}
+
+	($testinc = $inc) =~ s/\\lib$/\\script/;
+	if (-e "$testinc\\PermChg.pl" && -e "$testinc\\PermDump.pl" && -e "$testinc\\PermFix.pl") {
+		$script_dir = $testinc;
 		last;
 	}
 }
-defined $script_dir or die "namedobject.t requires access to the Perm(Chg|Dump|Fix).pl scripts.  Unable to find them in \@INC so testing has halted.\n";
+defined $script_dir or die "$0 requires access to the Perm(Chg|Dump|Fix).pl scripts.  Unable to find them in \@INC so testing has halted.\n";
 
 my $tempdir = "$ENV{TEMP}\\Win32-Security_TestDir_$$";
--d $tempdir and die "namedobject.t requires a temp directory for testing.  The directory '$tempdir' already exists so testing has halted.\n";
+-d $tempdir and die "$0 requires a temp directory for testing.  The directory '$tempdir' already exists so testing has halted.\n";
 mkdir($tempdir, 0);
--d $tempdir or die "namedobject.t requires a temp directory for testing.  Unable to create the directory '$tempdir' so testing has halted.\n";
+-d $tempdir or die "$0 requires a temp directory for testing.  Unable to create the directory '$tempdir' so testing has halted.\n";
 
 eval {
 	#First we set the permissions on $tempdir
@@ -194,6 +201,15 @@ eval {
 	ok( &permdump("$tempdir\\GuestWrite\\foo.txt"),
 			join("\n", map { "$_,FULL,,FI" } ($admin, "\"$system\"", $username)) );
 
+	#Now testing -b on it's own . . .
+	ok( &permchg("$tempdir\\GuestWrite", "-q -c -b"), "" );
+	ok( &cacls("$tempdir\\GuestWrite"),
+			join("\n", map { "$_:(OI)(CI)F" } ($admin, $system, $username)) );
+	ok( &cacls("$tempdir\\GuestWrite\\foo.txt"),
+			join("\n", map { "$_:F" } ($admin, $system, $username)) );
+	ok( &permdump("$tempdir\\GuestWrite"),
+			join("\n", ",INHERITANCE_BLOCKED,,DB", map { "$_,FULL,FULL_INHERIT,DX" } ($admin, "\"$system\"", $username)) );
+
 	system("rd /s /q \"$tempdir\\GuestWrite\"");
 
 
@@ -291,7 +307,7 @@ eval {
 my $err = $@;
 
 system("rd /s /q \"$ENV{TEMP}\\Win32-Security_TestDir_$$\"");
--d "$ENV{TEMP}\\Win32-Security_TestDir_$$" and die "namedobject.t used a temp directory for testing.  Unable to erase the directory '$tempdir' after testing was completed.\n";
+-d "$ENV{TEMP}\\Win32-Security_TestDir_$$" and die "$0 used a temp directory for testing.  Unable to erase the directory '$tempdir' after testing was completed.\n";
 
 die $err if $err ne '';
 

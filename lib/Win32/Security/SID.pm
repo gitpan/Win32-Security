@@ -5,7 +5,7 @@
 # Author: Toby Ovod-Everett
 #
 #############################################################################
-# Copyright 2000, 2003 Toby Ovod-Everett.  All rights reserved
+# Copyright 2000, 2003, 2004 Toby Ovod-Everett.  All rights reserved
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
@@ -32,7 +32,7 @@ formats and for converting between SIDs and Trustees (usernames).
 
 =head2 Installation instructions
 
-This installs as part of C<Win32::Security>.  See 
+This installs as part of C<Win32-Security.  See 
 C<Win32::Security::NamedObject> for more information.
 
 =head1 Function Reference

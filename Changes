@@ -1,5 +1,24 @@
 Revision history for Perl extension Win32::Security
 
+0.50  Sat Mar 20 2004
+  - Moved to using Build.PL (i.e. Module::Build).
+  - Moved utility scripts into script dir so they will install to Perl/bin
+  - Used subclassing in Build.PL to avoid turning them into BAT files
+  - Added package lines to (ACE|ACL|NamedObject|Recursor).pm to get them to
+    show up in META.yml
+  - Changed .t files to PC line endings
+  - Added support to ACTION_distdir in Build.PL to turn off extended tests
+  - Overrode make_tarball in Build.PL to avoid Archive::Tar (which is broken)
+    and use tar and gzip from the command line.  I will remove this when
+    a default install of Archive::Tar and Module::Build under ActivePerl
+    does not result in a flat tar file!
+  - Fixes to error_.* calls in W::S::Recursor::SE_FILE_OBJECT::PermDump
+  - Added PPM support to Build.PL
+  - Removed dacl_noprop from PermChg.pl because of an obscure bug involving
+    inheritance blocking preventing a subsequent dacl update from rippling
+    the updates.
+  - Added test for and fixed bug involving standalone -b passed to PermChg.pl
+
 0.28  Sat Mar 13 2004
   - Fixed owner code in Win32::Security::Recursor::SE_FILE_OBJECT::PermDump
   - Looked over PermFix.pl and tidied up some typos in the docs

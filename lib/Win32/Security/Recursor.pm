@@ -5,7 +5,7 @@
 # Author: Toby Ovod-Everett
 #
 #############################################################################
-# Copyright 2003 Toby Ovod-Everett.  All rights reserved
+# Copyright 2003, 2004 Toby Ovod-Everett.  All rights reserved
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
@@ -84,10 +84,10 @@ without the need for explicit subclassing.
 
 =head2 Installation instructions
 
-This installs as part of C<Win32::Security>.  See 
+This installs as part of C<Win32-Security>.  See 
 C<Win32::Security::NamedObject> for more information.
 
-It depends upon the other C<Win32::Security> modules and C<Class::Prototyped>.
+It depends upon the other C<Win32-Security modules and C<Class::Prototyped>.
 
 
 =head1 ARCHITECTURE
@@ -113,6 +113,8 @@ use strict;
 
 BEGIN {
 	Class::Prototyped->newPackage('Win32::Security::Recursor');
+
+	package Win32::Security::Recursor; #Added to ensure presence in META.yml
 }
 
 
@@ -882,10 +884,15 @@ sub Win32::Security::Recursor::SE_FILE_OBJECT::PermDump::new {
 			my $self = shift;
 			my($node) = @_;
 
-			my($node_name, $node_iscontainer) = $self->node_getinfo($node, 'name', $node, 'iscontainer');
-			$self->dump_line( name => $node_name, accessMask => 'ERROR_ENUM_CHILDREN',
-					desc => ($node_iscontainer ? 'D' : 'F').'E' );
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
 
+			$self->dump_line( name => $node->{name}, accessMask => 'ERROR_ENUM_CHILDREN',
+					desc => ($node->{iscontainer} ? 'D' : 'F').'E' );
 			die;
 		},
 
@@ -893,10 +900,15 @@ sub Win32::Security::Recursor::SE_FILE_OBJECT::PermDump::new {
 			my $self = shift;
 			my($node) = @_;
 
-			my($node_name) = $self->node_getinfo($node, 'name');
-			$self->dump_line( name => $node_name, accessMask => 'ERROR_READ_FILEATTRIBS',
-					desc => '?E' );
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
 
+			$self->dump_line( name => $node->{name}, accessMask => 'ERROR_READ_FILEATTRIBS',
+					desc => '?E' );
 			die;
 		},
 
@@ -904,11 +916,33 @@ sub Win32::Security::Recursor::SE_FILE_OBJECT::PermDump::new {
 			my $self = shift;
 			my($node, $error) = @_;
 
-			my($node_name, $node_iscontainer) = $self->node_getinfo($node, 'name', $node, 'iscontainer');
-			$error =~ s/\. at.+//s;
-			$self->dump_line( name => $node_name, accessMask => 'ERROR_READ_OWNER', aceFlags => $error,
-					desc => ($node_iscontainer ? 'D' : 'F').'E' );
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
 
+			$error =~ s/\. at.+//s;
+			$self->dump_line( name => $node->{name}, accessMask => 'ERROR_READ_OWNER', aceFlags => $error,
+					desc => ($node->{iscontainer} ? 'D' : 'F').'E' );
+			die;
+		},
+
+		error_node_ownerSid => sub {
+			my $self = shift;
+			my($node, $error) = @_;
+
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
+
+			$error =~ s/\. at.+//s;
+			$self->dump_line( name => $node->{name}, accessMask => 'ERROR_READ_OWNER', aceFlags => $error,
+					desc => ($node->{iscontainer} ? 'D' : 'F').'E' );
 			die;
 		},
 
@@ -916,11 +950,16 @@ sub Win32::Security::Recursor::SE_FILE_OBJECT::PermDump::new {
 			my $self = shift;
 			my($node, $error) = @_;
 
-			my($node_name, $node_iscontainer) = $self->node_getinfo($node, 'name', $node, 'iscontainer');
-			$error =~ s/\. at.+//s;
-			$self->dump_line( name => $node_name, accessMask => 'ERROR_READ_DACL', aceFlags => $error,
-					desc => ($node_iscontainer ? 'D' : 'F').'E' );
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
 
+			$error =~ s/\. at.+//s;
+			$self->dump_line( name => $node->{name}, accessMask => 'ERROR_READ_DACL', aceFlags => $error,
+					desc => ($node->{iscontainer} ? 'D' : 'F').'E' );
 			die;
 		},
 
@@ -928,9 +967,14 @@ sub Win32::Security::Recursor::SE_FILE_OBJECT::PermDump::new {
 			my $self = shift;
 			my($node) = @_;
 
-			my($node_name) = $self->node_getinfo($node, 'name');
-			$self->dump_line(name => $node_name, trustee => 'JUNCTION', desc => 'DJ');
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
 
+			$self->dump_line(name => $node->{name}, trustee => 'JUNCTION', desc => 'DJ');
 			die;
 		},
 

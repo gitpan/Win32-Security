@@ -5,7 +5,7 @@
 # Author: Toby Ovod-Everett
 #
 #############################################################################
-# Copyright 2003 Toby Ovod-Everett.  All rights reserved
+# Copyright 2003, 2004 Toby Ovod-Everett.  All rights reserved
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
@@ -30,22 +30,49 @@ C<Win32::Security::NamedObject> - Security manipulation for named objects
 
 This module provide an object-oriented interface for manipulating security 
 information on named objects (i.e. files, registry keys, etc.).  Note that, like 
-the rest of C<Win32::Security>, it currently only provides support for files.  
+the rest of C<Win32-Security>, it currently only provides support for files.  
 It has been architected to eventually support all object types supported by the 
 C<GetNamedSecurityInfo> Win32 API call.  Also, it currently only supports access 
 to the DACL and Owner information - SACL access will come later.
 
 =head2 Installation instructions
 
-This installs as part of C<Win32::Security>.
+C<Win32::Security::NamedObject> installs as part of C<Win32-Security> and 
+depends upon the other modules in the distribution.  There are three options for 
+installing this distribution:
 
-To install via MakeMaker, it's the usual procedure - download from CPAN, 
-extract, type "perl Makefile.PL", "nmake", then "nmake test", then "nmake 
-install".  See C<TESTING> for more information about enabling the more extensive 
-test suite.
+=over 4
 
-It depends upon the other C<Win32::Security> modules.  The suite of 
-C<Win32::Security> modules depends upon:
+=item *
+
+Using C<Module::Build 0.24> or later:
+
+  Build.PL
+  perl build test
+  perl build install
+
+See C<TESTING> for more information about enabling the more extensive test 
+suite.
+
+=item *
+
+Using the PPM (the file has the extension C<.ppm.zip>) on CPAN and installing 
+under ActivePerl for Win32 by unzipping the C<.ppm.zip> file and then:
+
+  ppm install Win32-Security.ppd
+
+=item *
+
+Installing manually by copying the C<*.pm> files in C<lib\Win32\Security> to 
+C<Perl\site\lib\Win32\Security> and the C<*.pl> files in C<script> to 
+C<Perl\bin>.
+
+=back
+
+
+=head2 Dependencies
+
+The suite of C<Win32-Security> modules depends upon:
 
 =over 4
 
@@ -67,13 +94,13 @@ Flexible support for manipulating masks and constants.
 =item C<Win32::API>
 
 Support for making arbitrary Win32 API calls from Perl.  There is no C code 
-anywhere in C<Win32::Security>.  C<Win32::API> is why.
+anywhere in C<Win32-Security>.  C<Win32::API> is why.
 
 =back
 
 All of the above modules should be available on CPAN, and also via PPM.
 
-=head1 C<Win32::Security> MODULES
+=head1 C<Win32-Security> MODULES
 
 =head2 C<Win32::Security::SID>
 
@@ -112,15 +139,15 @@ Named Objects and inspecting and/or modifying the security settings for those
 objects.
 
 
-=head1 C<Win32::Security> SCRIPTS
+=head1 C<Win32-Security> SCRIPTS
 
-Provided for your amusement and use are a few scripts that make use of the above 
-modules.  These scripts were the raison d'etre for the modules, and so it seemed 
-justifiable to ship them with it.  The scripts were located in the 
-C<lib\Win32\Security> directory so that they will be automatically installed as 
-part of the package when deployed via PPM.  The scripts have documentation (use 
-the C<-h> option), but here is a quick overview of them so that you don't 
-overlook them.
+Provided for your use are a few utilities that make use of the above modules.  
+These scripts were the raison d'etre for the modules, and so it seemed 
+justifiable to ship them with it.  The scripts should be automatically installed 
+to C<Perl\bin>, so if C<perl.exe> is in your path, these scripts should be in 
+your path as well (i.e. you should be able to type "C<PermDump.pl -h>" at the 
+command prompt).  The scripts have documentation (use the C<-h> option), but 
+here is a quick overview of them so that you don't overlook them.
 
 =head2 C<PermDump.pl>
 
@@ -129,14 +156,21 @@ inherited and explicit permissions along with determining when there are
 problems with inherited permissions.  It has a number of options, and it's 
 designed to output in either TDF or CSV format for easy parsing and viewing.
 
-I would personally strongly recommend that all system administrators set up a 
-nightly task to dump all the permissions on server volumes to a text file.  This 
+I would personally recommend that all system administrators set up a nightly 
+task to dump all the permissions on shared server volumes to a text file.  This 
 makes it easy to recover should you make a mistake while doing permissions 
 manipulation, and it also gives you a searchable file for looking for 
 permissions without waiting for the script to dump permissions.  While the 
 script is very fast and generally scans several hundred files per second, if you 
 have a volume with hundreds of thousands of files, it can still take a while to 
-run.
+run.  Such a command line might look like:
+
+  PermDump.pl -c -r D:\Shared > D:\Shared_Perms.csv
+
+or, if you want the paths to be relative:
+
+  D: && cd D:\Shared && PermDump.pl -c -r . > D:\Shared_Perms.csv
+
 
 =head2 C<PermFix.pl>
 
@@ -149,6 +183,7 @@ the resulting permissions closely for signs of error.
 This utility is designed to do one simple task: fix problems with inherited 
 permissions resulting from files and/or folders being moved between two folders 
 on the same volume that have differing inheritable permissions.
+
 
 =head2 C<PermChg.pl>
 
@@ -169,17 +204,18 @@ much like C<X?CACLS.EXE>.  The second allows you to pass the permissions in a
 text file using the same format as is outputted by C<PermDump.pl>.
 
 Say you get a call from an executive insisting that Jane be given access to 
-everything that John has access to.  The first step is to make Jane a member of 
-all of the groups that John is in, but that doesn't address explicitly assigned 
-permissions.  To deal with that, dump all the permissions on the volume using 
-C<PermDump.pl>.  Open the file up in Excel and sort on the Trustee.  Copy the 
-lines for John into another spreadsheet and replace the Trustee name with 
+everything that John currently has access to.  The first step is to make Jane a 
+member of all of the groups that John is in, but that doesn't address explicitly 
+assigned permissions.  To deal with that, dump all the permissions on the volume 
+using C<PermDump.pl>.  Open the file up in Excel and sort on the Trustee.  Copy 
+the lines for John into another spreadsheet and replace the Trustee name with 
 Jane's.  Then pass that into C<PermChg.pl> with the C<-file> option and you're 
 done!
 
+
 =head1 TESTING
 
-For a set of modules like Win32::Security that are intended to interact with 
+For a set of modules like Win32-Security that are intended to interact with 
 permissions, the only way to really test them is to have them interact with real 
 permissions.  Unfortunately, the only viable to do that is to modify a live 
 filesystem and see what happens.  However, I felt uncomfortable running such 
@@ -200,6 +236,7 @@ To enable them, open C<t\extended.t> and C<t\scripts.t> and change line 11 in
 each to read "C<< $enabled = 1; >>".  I strongly encourage testing using every 
 OS you plan to use the modules with, and using both privileged and 
 non-privileged accounts.
+
 
 =head1 ARCHITECTURE
 
@@ -222,6 +259,8 @@ use strict;
 BEGIN {
 	Class::Prototyped->newPackage('Win32::Security::NamedObject');
 
+	package Win32::Security::NamedObject; #Added to ensure presence in META.yml
+
 	Win32::Security::NamedObject->reflect->addSlots(
 		Win32::Security::ACE->reflect->getSlot('objectTypes'),
 	);
@@ -233,7 +272,7 @@ BEGIN {
 	}
 }
 
-$Win32::Security::NamedObject::VERSION = '0.28';
+$Win32::Security::NamedObject::VERSION = '0.50';
 
 =head1 Method Reference
 

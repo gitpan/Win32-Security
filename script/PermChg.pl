@@ -30,7 +30,7 @@ use vars qw($dumper);
 my $options = {};
 GetOptions($options, qw(help csv! replace! verbose! quiet! owner=s propagateowner! allow=s@ deny=s@ block! file=s)) or die "Invalid option.\n";
 
-if (defined($options->{help})) {
+if (defined($options->{help}) || scalar(keys %{$options}) == 0) {
 	print <<ENDHELP;
 !!!WARNING!!!   This utility is still in beta!   !!!WARNING!!!
 
@@ -41,8 +41,8 @@ PermChg.pl options:
   -q[uiet]          Doesn\'t ask before implementing changes.  Only provides
                     feedback if -v[erbose] is also specified.
 
-  -o[wner]=user     Set owner    !!!! NOT COMPLETELY IMPLEMENTED !!!!
-  -p[ropagateowner] Ownership should be propagated through the tree
+  -o[wner]=user          Set owner    !!!! NOT COMPLETELY IMPLEMENTED !!!!
+  -[no]p[ropagateowner]  Ownership should be propagated through the tree
 
   -a[llow]=user:[mask[(flags)]]  Allow permissions.
   -d[eny]=user:[mask[(flags)]]   Deny permissions.
@@ -52,8 +52,10 @@ PermChg.pl options:
 
   -f[ile]=file    Use passed filename as input in CSV or TDF format in same
                   format as PermDump.pl.  Using '-' opens STDIN.  The -o[wner],
-                  -p[ropagateowner], -a[llow], -d[eny], and -[no]b[lock]
-                  options are not valid in conjunction with -f[ile].
+                  -a[llow], -d[eny], and -[no]b[lock] options are not valid in
+                  conjunction with -f[ile].  The -p[ropagateowner] option is
+                  is presumed if any O records are passed, unless it is
+                  explicitly turned off with -nop[propagateowner].
 
 Multiple -a and -d options can be specified in a single call.  The user for an
 -a or -d option should be specified as Domain\\Username.
@@ -118,6 +120,7 @@ $dumper = Win32::Security::Recursor::SE_FILE_OBJECT::PermDump->new({csv => $opti
 &parse_options($options);
 &check($options) unless $options->{quiet};
 &permset_chg($options);
+&ownerset_chg($options);
 
 
 
@@ -185,15 +188,16 @@ sub parse_options {
 						$permset->{lc($type).'_strip'}->{&Win32::Security::SID::ConvertNameToSid($trustee)} = undef;
 
 					} elsif ($rec_type eq 'B') {
-						$permset->{block} = 1;
+						$mask =~ /^INHERITANCE_(UN)?BLOCKED$/i or die "FATAL ERROR: B record needs INHERITANCE_BLOCKED or INHERITANCE_UNBLOCKED for '$name'.\n";
+						$permset->{block} = $1 ? 0 : 1;
 					}
 				} elsif ($rec_type eq 'O') {
 					defined $ownerset and die "FATAL ERROR: Multiple O records specified for '$name'.\n";
 					$ownerset = {
 						owner          => $trustee,
 						ownerSid       => &Win32::Security::SID::ConvertNameToSid($trustee),
-						propagateowner => 1,
 					};
+					$options->{propagateowner} = 1 unless defined $options->{propagateowner};
 				} else {
 					die "FATAL ERROR: The -f[ile] option does not accept records of type '$desc'.\n";
 				}
@@ -211,6 +215,7 @@ sub parse_options {
 
 			if (defined $ownerset) {
 				$ownerset->{name} = $name;
+				$ownerset->{longfullname} = $longfullname;
 				exists $options->{ownerset}->{$longfullname} and
 						die "FATAL ERROR: Object referred to by different names:  '$options->{ownerset}->{$longfullname}->{name}'\n  '$name'\n";
 				$options->{ownerset}->{$longfullname} = $ownerset;
@@ -219,7 +224,7 @@ sub parse_options {
 	} else {
 		my($permset, $ownerset);
 
-		if ($options->{replace} || $options->{allow} || $options->{deny}) {
+		if ($options->{replace} || $options->{allow} || $options->{deny} || $options->{block}) {
 			$permset ||= {
 					allow_strip => {},
 					deny_strip => {},
@@ -261,7 +266,6 @@ sub parse_options {
 			$ownerset = {
 					owner          => $options->{owner},
 					ownerSid       => &Win32::Security::SID::ConvertNameToSid($options->{owner}),
-					propagateowner => $options->{propagateowner},
 				};
 			delete $options->{owner};
 			delete $options->{propagateowner};
@@ -283,6 +287,7 @@ sub parse_options {
 
 			if (defined $ownerset) {
 				$ownerset->{name} = $name;
+				$ownerset->{longfullname} = $longfullname;
 				exists $options->{ownerset}->{$longfullname} and
 						die "FATAL ERROR: Object referred to by different names:  '$options->{ownerset}->{$longfullname}->{name}'\n  '$name'\n";
 				$options->{ownerset}->{$longfullname} = $ownerset;
@@ -291,6 +296,7 @@ sub parse_options {
 	}
 
 	foreach my $set (qw(owner perm)) {
+		next if $set eq 'owner' && !$options->{propagateowner};
 		my $parents = {};
 
 		my(@filelist) = reverse sort keys %{$options->{"${set}set"}};
@@ -383,6 +389,10 @@ sub check {
 		}
 	}
 
+	if (scalar keys %{$options->{ownerset}}) {
+		print "\Ownership for a whole bunch of files will be REPLACED!!!\n";
+	}
+
 	my $answer = undef;
 	until (defined $answer) {
 		print "Do you want to make these changes? ";
@@ -398,6 +408,8 @@ sub check {
 sub permset_chg {
 	my($options) = @_;
 
+	scalar(keys %{$options->{permset}}) or return;
+
 	if ($options->{verbose}) {
 		print "Old permissions:\n";
 		$dumper->print_header();
@@ -410,10 +422,10 @@ sub permset_chg {
 	foreach my $rootname (sort keys %{$options->{perm_parents}}) {
 		foreach my $name (sort keys %{$options->{perm_parents}->{$rootname}}) {
 			eval { &perm_chg($options->{permset}->{$name}, noprop => 1, verbose => $options->{verbose}); };
-			$@ and die $@;
+			$@ and print STDERR "ERROR: $@";
 		}
 		eval { &perm_chg($options->{permset}->{$rootname}, noprop => 0, verbose => $options->{verbose}); };
-		$@ and die $@;
+		$@ and print STDERR "ERROR: $@";
 	}
 
 	if ($options->{verbose}) {
@@ -444,7 +456,8 @@ sub perm_chg {
 	if (defined $perm->{block} && $perm->{block} != $control->{SE_DACL_PROTECTED}) {
 		$namedobject->dacl($new_dacl, ($perm->{block} ? '' : 'UN').'PROTECTED_DACL_SECURITY_INFORMATION');
 	} elsif ($params{noprop} && !$control->{SE_DACL_PROTECTED}) {
-		$namedobject->dacl_noprop($new_dacl);
+		$namedobject->dacl($new_dacl); # This used to be dacl_noprop, but I need to add support first for
+				# detecting an interposed inheritance block between the parent folder and the child.
 	} else {
 		$namedobject->dacl($new_dacl);
 	}
@@ -452,26 +465,199 @@ sub perm_chg {
 
 
 
+sub ownerset_chg {
+	my($options) = @_;
 
-{
-	my $owner_recursor;
-	sub get_owner_recursor {
-		return $owner_recursor ||= Win32::Security::Recursor::SE_FILE_OBJECT->new(
-			ownerSid => '',
+	scalar(keys %{$options->{ownerset}}) or return;
 
-			payload => sub {
-				my $self = shift;
-
-				$self->payload_count($self->payload_count()+1);
-				my($node_namedobject, $node_ownerSid) = $self->node_getinfo(node => [qw(namedobject ownerSid)]);
-				my $ownerSid = $self->ownerSid();
-				$node_namedobject->ownerSid($ownerSid) if $node_ownerSid ne $ownerSid;
-			},
-
-			payload_count => 0,
-
-			debug => 1
-		);
-
+	if ($options->{verbose}) {
+		print "Ownership changes:\n";
+		print join($options->{csv} ? "," : "\t", 'Path', 'Old_Owner', 'New_Owner')."\n";
 	}
+
+	if ($options->{propagateowner}) {
+		my $owner_recursor = &get_owner_recursor($options);
+
+		foreach my $parent (sort keys %{$options->{owner_parents}}) {
+			$owner_recursor->recurse($parent);
+		}
+	} else {
+		print STDERR "ERROR: Owner changing without propgateowner unsupported right now.\n";
+		foreach my $name (sort keys %{$options->{ownerset}}) {
+		}
+	}
+
+	if ($options->{verbose}) {
+		print "Old permissions:\n";
+		$dumper->print_header();
+		foreach my $lcname (sort keys %{$options->{permset}}) {
+			$dumper->recurse($options->{permset}->{$lcname}->{name});
+		}
+		print '-' x 75, "\n";
+	}
+
+	foreach my $rootname (sort keys %{$options->{perm_parents}}) {
+		foreach my $name (sort keys %{$options->{perm_parents}->{$rootname}}) {
+			eval { &perm_chg($options->{permset}->{$name}, noprop => 1, verbose => $options->{verbose}); };
+			$@ and die $@;
+		}
+		eval { &perm_chg($options->{permset}->{$rootname}, noprop => 0, verbose => $options->{verbose}); };
+		$@ and die $@;
+	}
+
+	if ($options->{verbose}) {
+		print "New permissions:\n";
+		$dumper->print_header();
+		foreach my $lcname (sort keys %{$options->{permset}}) {
+			$dumper->recurse($options->{permset}->{$lcname}->{name});
+		}
+		print '-' x 75, "\n";
+	}
+}
+
+
+
+sub get_owner_recursor {
+	my($options) = @_;
+
+	my $setqueue;
+	my $ownerset = $options->{ownerset};
+
+	return Win32::Security::Recursor::SE_FILE_OBJECT->new(
+		[qw(recurse superable)] => sub {
+			my $parent = shift;
+			my($name) = @_;
+
+			$setqueue = [$ownerset->{$name}];
+			$parent->reflect->super('recurse', $setqueue->[0]->{name});
+		},
+
+		payload => sub {
+			my $self = shift;
+
+			my($node_name, $node_namedobject, $node_ownerSid) = $self->node_getinfo(node => [qw(name namedobject ownerSid)]);
+
+			my $longfullname = $setqueue->[0]->{longfullname} . lc(substr($node_name, length($setqueue->[0]->{name})));
+
+			while (@$setqueue && &isparent($setqueue->[-1]->{longfullname}, $longfullname) != -1) {
+				pop(@$setqueue);
+			}
+
+			if (exists $ownerset->{$longfullname}) {
+				push(@$setqueue, $ownerset->{$longfullname});
+			}
+
+			scalar(@$setqueue) or die "FATAL BUG: Null sidqueue for '$node_name'.\n";
+
+			if ($node_ownerSid ne $setqueue->[-1]->{ownerSid}) {
+				if ($options->{verbose}) {
+					print join($options->{csv} ? "," : "\t",
+											map {my $x = $_; $x =~ s/\"/\"\"/g; $x = '"'.$x.'"' if $x =~ /[\"\', ]/; $x}
+											$node_name, $self->node_getinfo(node => 'ownerTrustee'), $setqueue->[-1]->{owner}
+										)."\n";
+				}
+				eval { $node_namedobject->ownerSid($setqueue->[-1]->{ownerSid}); };
+				if (my $error = $@) {
+					$error =~ s/\. at.+//s;
+					print STDERR "ERROR_SET_OWNER: $error '$node_name'\n";
+				}
+			}
+
+		},
+
+		debug => 0,
+
+		error_node_enumchildren => sub {
+			my $self = shift;
+			my($node) = @_;
+
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
+
+			print STDERR "ERROR_ENUM_CHILDREN: '$node->{name}'\n";
+			die;
+		},
+
+		error_node_fileattribs => sub {
+			my $self = shift;
+			my($node) = @_;
+
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
+
+			print STDERR "ERROR_READ_FILEATTRIBS: '$node->{name}'\n";
+			die;
+		},
+
+		error_node_ownerTrustee => sub {
+			my $self = shift;
+			my($node, $error) = @_;
+
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
+
+			$error =~ s/\. at.+//s;
+			print STDERR "ERROR_READ_OWNER: $error '$node->{name}'\n";
+			die;
+		},
+
+		error_node_ownerSid => sub {
+			my $self = shift;
+			my($node, $error) = @_;
+
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
+
+			$error =~ s/\. at.+//s;
+			print STDERR "ERROR_READ_OWNER: $error '$node->{name}'\n";
+			die;
+		},
+
+		error_node_dacl => sub {
+			my $self = shift;
+			my($node, $error) = @_;
+
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
+
+			$error =~ s/\. at.+//s;
+			print STDERR "ERROR_READ_DACL: $error '$node->{name}'\n";
+			die;
+		},
+
+		error_node_isjunction => sub {
+			my $self = shift;
+			my($node) = @_;
+
+			defined $node or return;
+			unless (ref($node) eq 'HASH') {
+					$node = $node eq 'node' ? $self->nodes()->[-1] :
+									$node eq 'parent' ? $self->nodes()->[-1]->{parent} :
+									die "node_getinfo can't get data for '$node'";
+			}
+
+			print STDERR "JUNCTION: '$node->{name}'\n";
+			die;
+		},
+	);
 }

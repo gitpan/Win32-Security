@@ -5,7 +5,7 @@
 # Author: Toby Ovod-Everett
 #
 #############################################################################
-# Copyright 2003 Toby Ovod-Everett.  All rights reserved
+# Copyright 2003, 2004 Toby Ovod-Everett.  All rights reserved
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the same terms as Perl itself.
@@ -60,13 +60,13 @@ for mutability without invalidating the cache.
 
 =head2 Installation instructions
 
-This installs as part of C<Win32::Security>.  See 
+This installs as part of C<Win32-Security>.  See 
 C<Win32::Security::NamedObject> for more information.
 
 It depends upon C<Class::Prototyped> and C<Data::BitMask>, which should be 
 installable via PPM or available on CPAN.  It also depends upon 
 C<Win32::Security::Raw> and C<Win32::Security::SID> , which are installed as 
-part of C<Win32::Security>.
+part of C<Win32-Security>.
 
 
 =head1 ARCHITECTURE
@@ -213,6 +213,8 @@ use strict;
 
 BEGIN {
 	Class::Prototyped->newPackage('Win32::Security::ACE');
+
+	package Win32::Security::ACE; #Added to ensure presence in META.yml
 
 	Win32::Security::ACE->reflect->addSlot(
 		objectTypes => [
