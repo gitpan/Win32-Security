@@ -6,7 +6,7 @@ WriteMakefile(
 	VERSION_FROM => 'lib/Win32/Security/NamedObject.pm', # finds $VERSION
 	'PREREQ_PM' => {
 		'Class::Prototyped' => '0.98',
-		'Data::BitMask' => '0.12',
+		'Data::BitMask' => '0.13',
 		'Win32::API' => undef,
 	},
 );

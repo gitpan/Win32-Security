@@ -10,9 +10,9 @@ BEGIN {
 }
 
 $Data::Dumper::Sortkeys = 1;
-$Data::Dumper::Sortkeys = 1;
+$Data::Dumper::Sortkeys = 1; #Repeated to avoid warnings
 
-#Testing ACE creationg by a variety of methods
+#Testing ACE creation by a variety of methods
 my $ace1 = Win32::Security::ACE->new('FILE', 'ALLOW', 'FULL_INHERIT', 'FULL', 'BUILTIN\\Administrators');
 my $rawAce1 = $ace1->rawAce();
 ok($rawAce1, "\x{00}\x{03}\x{18}\x{00}\x{ff}\x{01}\x{1f}\x{00}\x{01}\x{02}\x{00}\x{00}\x{00}\x{00}\x{00}\x{05}\x{20}\x{00}\x{00}\x{00}\x{20}\x{02}\x{00}\x{00}");
@@ -67,19 +67,19 @@ ok($ace2->rawAceFlags(), 3);
 ok($ace4->rawAceFlags(), 3);
 
 #Testing aceFlags()
-ok(join("|", sort keys %{$ace1->aceFlags()}), 'CONTAINER_INHERIT_ACE|FI|FULL_INHERIT|OBJECT_INHERIT_ACE');
+ok(join("|", sort keys %{$ace1->aceFlags()}), 'CI|CONTAINER_INHERIT_ACE|FI|FULL_INHERIT|OBJECT_INHERIT_ACE|OI');
 ok(join("|", sort keys %{$ace3->aceFlags()}), '');
 
 #Testing aceFlags() return values for invariance in the face of manipulation
 my $aceFlags1 = $ace1->aceFlags();
-ok(join("|", sort keys %{$aceFlags1}), 'CONTAINER_INHERIT_ACE|FI|FULL_INHERIT|OBJECT_INHERIT_ACE');
+ok(join("|", sort keys %{$aceFlags1}), 'CI|CONTAINER_INHERIT_ACE|FI|FULL_INHERIT|OBJECT_INHERIT_ACE|OI');
 $aceFlags1->{hithere} = 1;
-ok(join("|", sort keys %{$aceFlags1}), 'CONTAINER_INHERIT_ACE|FI|FULL_INHERIT|OBJECT_INHERIT_ACE|hithere');
-ok(join("|", sort keys %{$ace1->aceFlags()}), 'CONTAINER_INHERIT_ACE|FI|FULL_INHERIT|OBJECT_INHERIT_ACE');
+ok(join("|", sort keys %{$aceFlags1}), 'CI|CONTAINER_INHERIT_ACE|FI|FULL_INHERIT|OBJECT_INHERIT_ACE|OI|hithere');
+ok(join("|", sort keys %{$ace1->aceFlags()}), 'CI|CONTAINER_INHERIT_ACE|FI|FULL_INHERIT|OBJECT_INHERIT_ACE|OI');
 
 #Testing ACE mutation via aceFlags()
 $ace3->aceFlags('CONTAINER_INHERIT_ACE');
-ok(join("|", sort keys %{$ace3->aceFlags()}), 'CONTAINER_INHERIT_ACE');
+ok(join("|", sort keys %{$ace3->aceFlags()}), 'CI|CONTAINER_INHERIT_ACE');
 
 #Testing explainAceFlags()
 ok(join("|", sort keys %{$ace1->explainAceFlags()}), 'FULL_INHERIT');
@@ -93,7 +93,7 @@ ok(join("|", sort keys %{$ace1->explainAceFlags()}), 'FULL_INHERIT');
 
 #Testing ACE mutation via explainAceFlags()
 $ace3->explainAceFlags({FULL_INHERIT => 1, CONTAINER_INHERIT_ACE => 0});
-ok(join("|", sort keys %{$ace3->aceFlags()}), 'OBJECT_INHERIT_ACE');
+ok(join("|", sort keys %{$ace3->aceFlags()}), 'OBJECT_INHERIT_ACE|OI');
 
 #Testing trustee() and sid()
 ok($ace1->trustee(), 'BUILTIN\\Administrators');
@@ -162,7 +162,7 @@ ok(join("|", sort keys %{$ace7->cleansedAccessMask()}), 'FILE_GENERIC_EXECUTE|FI
 ok(join("|", sort keys %{$ace7->dbmAccessMask->break_mask($ace7->cleansedAccessMask())}), $read_list);
 
 #Testing inheritable() for simple inheritance
-ok(join("|", sort keys %{$ace3->aceFlags()}), 'OBJECT_INHERIT_ACE');
+ok(join("|", sort keys %{$ace3->aceFlags()}), 'OBJECT_INHERIT_ACE|OI');
 ok(join("|", map {$_->rawAce()} $ace3->inheritable('CONTAINER')),
    join("|", map {$_->rawAce()} Win32::Security::ACE::SE_FILE_OBJECT->new('ALLOW', 'OBJECT_INHERIT_ACE|INHERIT_ONLY_ACE|INHERITED_ACE', 'FULL', 'BUILTIN\\Administrators'))
   );

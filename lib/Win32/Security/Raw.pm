@@ -11,7 +11,7 @@
 # under the same terms as Perl itself.
 #
 # For comments, questions, bugs or general interest, feel free to
-# contact Toby Ovod-Everett at tovod-everett@alascom.att.com
+# contact Toby Ovod-Everett at toby@ovod-everett.org
 #############################################################################
 
 =head1 NAME
@@ -32,11 +32,8 @@ module.
 
 =head2 Installation instructions
 
-This installs with MakeMaker as part of Win32::Security.
-
-To install via MakeMaker, it's the usual procedure - download from CPAN,
-extract, type "perl Makefile.PL", "nmake" then "nmake install". Don't
-do an "nmake test" because the I haven't written a test suite yet.
+This installs as part of C<Win32::Security>.  See 
+C<Win32::Security::NamedObject> for more information.
 
 It depends upon the C<Win32::API> and C<Data::BitMask> modules, which
 should be installable via PPM or available on CPAN.
@@ -45,7 +42,7 @@ should be installable via PPM or available on CPAN.
 
 use Carp;
 use Win32::API;
-use Data::BitMask;
+use Data::BitMask '0.13';
 
 use strict;
 
@@ -121,9 +118,31 @@ sub CopyMemory_Read {
 }
 
 
+=head2 C<CopyMemory_Write>
+
+Uses C<RtlMoveMemory> to write to an arbitrary memory location.  You should pass 
+a string that will be copied and a pointer in the form of a Perl integer.  The 
+caller is responsible for ensuring that the data to be written will not overrun 
+the memory location.
+
+=cut
+
+{
+my $call;
+sub CopyMemory_Write {
+	my($string, $pDest) = @_;
+
+	$call ||= Win32::API->new('kernel32',
+				'RtlMoveMemory', [qw(I P I)], 'V') or
+			Carp::croak("Unable to connect to RtlMoveMemory.");
+	$call->Call($pDest, $string, length($string));
+}
+}
+
+
 =head2 C<GetCurrentProcess>
 
-Returns a handle to the CurrentProcess as an integer.
+Returns a handle to the C<CurrentProcess> as an integer.
 
 =cut
 
@@ -141,11 +160,11 @@ sub GetCurrentProcess {
 
 =head2 C<GetAclInformation>
 
-This expects a pointer to an ACL and a AclInformationClass value
-(i.e. C<'AclSizeInformation'> or C<'AclRevisionInformation'>).  It returns the
-approriate data for the AclInformationClass value (the revision in the case of
-C<AclRevisionInformation>, the AceCount, AclBytesInUse, and AclBytesFree in the
-case of C<AclSizeInformation>).
+This expects a pointer to an ACL and an C<AclInformationClass> value (i.e. 
+C<'AclSizeInformation'> or C<'AclRevisionInformation'>).  It returns the 
+approriate data for the C<AclInformationClass> value (the C<AclRevision> in the 
+case of C<AclRevisionInformation>, the C<AceCount>, C<AclBytesInUse>, and 
+C<AclBytesFree> in the case of C<AclSizeInformation>).
 
 =cut
 
@@ -201,8 +220,8 @@ sub GetLengthSid {
 This expects an object name (i.e. a path to a file, registry key, etc.), an 
 object type (i.e. C<'SE_FILE_OBJECT'>), and a C<SECURITY_INFORMATION> mask (i.e. 
 C<'OWNER_SECURITY_INFORMATION|DACL_SECURITY_INFORMATION'>).  It returns pointers 
-(as integers) to sidOwner, sidGroup, Dacl, Sacl, and the SecurityDescriptor.  
-Some of these may be null pointers.
+(as integers) to C<sidOwner>, C<sidGroup>, C<Dacl>, C<Sacl>, and the 
+C<SecurityDescriptor>.  Some of these may be null pointers.
 
 =cut
 
@@ -236,7 +255,7 @@ sub GetNamedSecurityInfo {
 
 =head2 C<GetSecurityDescriptorControl>
 
-This expects a pointer to a SecurityDescriptor.  It returns the
+This expects a pointer to a C<SecurityDescriptor>.  It returns the
 C<Data::BitMask::break_mask> form for the
 C<SECURITY_DESCRIPTOR_CONTROL> mask.
 
@@ -264,6 +283,55 @@ sub GetSecurityDescriptorControl {
 }
 
 
+=head2 C<InitializeSecurityDescriptor>
+
+Calls C<InitializeSecurityDescriptor> on the passed pointer.  C<dwRevision> is
+optional - if omitted, revision 1 is used.  Dies if the call fails.
+
+=cut
+
+{
+my $call;
+sub InitializeSecurityDescriptor {
+	my($pSecurityDescriptor, $dwRevision) = @_;
+
+	$dwRevision = 1 unless defined $dwRevision;
+
+	$call ||= Win32::API->new('advapi32',
+				'InitializeSecurityDescriptor', [qw(I I)], 'I') or
+			Carp::croak("Unable to connect to InitializeSecurityDescriptor.");
+
+	$call->Call($pSecurityDescriptor, $dwRevision) or Carp::croak("Unable to InitializeSecurityDescriptor $pSecurityDescriptor.");
+}
+}
+
+
+=head2 C<LocalAlloc>
+
+Calls C<LocalAlloc> with the passed C<uFlags> and C<size>.  It returns the 
+pointer, but dies if a null pointer is returned from the call.  The C<uFlags> 
+parameter can be passed as either an integer or as legal C<LMEM_FLAGS>.
+
+=cut
+
+{
+my $call;
+sub LocalAlloc {
+	my($uFlags, $uBytes) = @_;
+
+	$uFlags = &Win32::Security::LMEM_FLAGS->build_mask($uFlags);
+
+	$call ||= Win32::API->new('kernel32',
+				'LocalAlloc', [qw(I I)], 'I') or
+			Carp::croak("Unable to connect to LocalAlloc.");
+
+	my $ptr = $call->Call($uFlags, $uBytes);
+	$ptr or Carp::croak("Unable to LocalAlloc $uBytes.");
+	return $ptr;
+}
+}
+
+
 =head2 C<LocalFree>
 
 Calls C<LocalFree> on the passed pointer.  The passed pointer should be in the
@@ -286,6 +354,9 @@ sub LocalFree {
 
 
 =head2 C<LookupPrivilegeValue>
+
+Pass C<SystemName> (undef permitted) and a privilege C<Name> (i.e. 
+C<SeRestorePrivilege>).  Returns the C<Luid>.
 
 =cut
 
@@ -310,6 +381,9 @@ sub LookupPrivilegeValue {
 
 =head2 C<OpenProcessToken>
 
+Pass C<ProcessHandle> and C<DesiredAccess> (C<TokenRights>).  Returns 
+C<TokenHandle>.
+
 =cut
 
 {
@@ -333,6 +407,41 @@ sub OpenProcessToken {
 	return $TokenHandle;
 }
 }
+
+
+=head2 C<SetFileSecurity>
+
+Pass C<FileName>, C<SecurityInfo>, and C<SecurityDescriptor>.  Useful for 
+setting permissions without propagating inheritable ACEs.
+
+=cut
+
+{
+my $call;
+my $os2k;
+sub SetFileSecurity {
+	my($pFileName, $SecurityInfo, $pSecurityDescriptor) = @_;
+
+	$call ||= Win32::API->new('advapi32',
+				'SetFileSecurity', [qw(P I I)], 'I') or
+			Carp::croak("Unable to connect to SetFileSecurity.");
+
+	$SecurityInfo = &Win32::Security::SECURITY_INFORMATION->build_mask($SecurityInfo);
+
+	unless (defined($os2k)) {
+		my(@osver) = Win32::GetOSVersion();
+		$os2k = ($osver[4] == 2 && $osver[1] >= 5);
+	}
+
+	if (!$os2k && scalar(grep(/PROTECTED/, keys %{&Win32::Security::SECURITY_INFORMATION->break_mask($SecurityInfo)})) ) {
+		Carp::croak("Use of PROTECTED SECURITY_INFORMATION constant on a non Win2K or greater OS.");
+	}
+
+	$call->Call($pFileName, $SecurityInfo, $pSecurityDescriptor) or
+			Carp::croak(&_format_error('SetFileSecurity'));
+}
+}
+
 
 
 =head2 C<SetNamedSecurityInfo>
@@ -367,10 +476,36 @@ sub SetNamedSecurityInfo {
 		Carp::croak("Use of PROTECTED SECURITY_INFORMATION constant on a non Win2K or greater OS.");
 	}
 
-	my $retval = $call->Call($pObjectName, int($ObjectType),
-			$SecurityInfo, $psidOwner, $psidGroup, $pDacl, $pSacl);
+	my $retval;
+	{
+		local $^W = 0; #Turn off warnings about uninitialized values . . .
+		$retval = $call->Call($pObjectName, int($ObjectType),
+				$SecurityInfo, $psidOwner, $psidGroup, $pDacl, $pSacl);
+	}
 
 	$retval and Carp::croak(&_format_error('SetNamedSecurityInfo', $retval));
+}
+}
+
+
+=head2 C<SetSecurityDescriptorDacl>
+
+Calls C<SetSecurityDescriptorDacl>.  Expects a pointer to a 
+C<SecurityDescriptor>, C<DaclPresent>, C<Dacl>, and C<DaclDefaulted>.  Dies if 
+the call fails.
+
+=cut
+
+{
+my $call;
+sub SetSecurityDescriptorDacl {
+	my($pSecurityDescriptor, $bDaclPresent, $pDacl, $bDaclDefaulted) = @_;
+
+	$call ||= Win32::API->new('advapi32',
+				'SetSecurityDescriptorDacl', [qw(I I I I)], 'I') or
+			Carp::croak("Unable to connect to SetSecurityDescriptorDacl.");
+
+	$call->Call($pSecurityDescriptor, $bDaclPresent, $pDacl, $bDaclDefaulted) or Carp::croak("Unable to SetSecurityDescriptorDacl.");
 }
 }
 
@@ -542,14 +677,13 @@ sub TokenRights {
 				STANDARD_RIGHTS_READ    => 0x00020000,
 				STANDARD_RIGHTS_WRITE   => 0x00020000,
 				STANDARD_RIGHTS_EXECUTE => 0x00020000,
-
-		);
+			);
 
 		$cache->add_constants(
 				TOKEN_EXECUTE => $cache->build_mask('STANDARD_RIGHTS_EXECUTE TOKEN_IMPERSONATE'),
 				TOKEN_READ =>    $cache->build_mask('STANDARD_RIGHTS_READ TOKEN_QUERY'),
 				TOKEN_WRITE =>   $cache->build_mask('STANDARD_RIGHTS_WRITE TOKEN_ADJUST_PRIVILEGES TOKEN_ADJUST_GROUPS TOKEN_ADJUST_DEFAULT'),
-				TOKEN_ALL_ACCESS => $cache->build_mask('ACCESS_SYSTEM_SECURITY') || 0x000F01FF,
+				TOKEN_ALL_ACCESS => $cache->build_mask('ACCESS_SYSTEM_SECURITY') | 0x000F01FF,
 			);
 	}
 	return $cache;
@@ -573,9 +707,42 @@ sub LUID_ATTRIBUTES {
 }
 
 
+=head2 &Win32::Security::LMEM_FLAGS
+
+=cut
+
+{
+my $cache;
+sub LMEM_FLAGS {
+	unless ($cache) {
+
+		$cache = Data::BitMask->new(
+				LMEM_FIXED          => 0x0000,
+				LMEM_MOVEABLE       => 0x0002,
+				LMEM_NOCOMPACT      => 0x0010,
+				LMEM_NODISCARD      => 0x0020,
+				LMEM_ZEROINIT       => 0x0040,
+				LMEM_MODIFY         => 0x0080,
+				LMEM_DISCARDABLE    => 0x0F00,
+				LMEM_VALID_FLAGS    => 0x0F72,
+				LMEM_INVALID_HANDLE => 0x8000,
+			);
+
+		$cache->add_constants(
+				LHND        => $cache->build_mask('LMEM_MOVEABLE LMEM_ZEROINIT'),
+				LPTR        => $cache->build_mask('LMEM_FIXED LMEM_ZEROINIT'),
+				NONZEROLHND => $cache->build_mask('LMEM_MOVEABLE'),
+				NONZEROLPTR => $cache->build_mask('LMEM_FIXED'),
+			);
+	}
+	return $cache;
+}
+}
+
+
 =head1 AUTHOR
 
-Toby Ovod-Everett, tovod-everett@alascom.att.com
+Toby Ovod-Everett, toby@ovod-everett.org
 
 =cut
 

@@ -11,7 +11,7 @@
 # under the same terms as Perl itself.
 #
 # For comments, questions, bugs or general interest, feel free to
-# contact Toby Ovod-Everett at tovod-everett@alascom.att.com
+# contact Toby Ovod-Everett at toby@ovod-everett.org
 #############################################################################
 
 =head1 NAME
@@ -32,11 +32,8 @@ formats and for converting between SIDs and Trustees (usernames).
 
 =head2 Installation instructions
 
-This installs with MakeMaker as part of Win32::Security.
-
-To install via MakeMaker, it's the usual procedure - download from CPAN,
-extract, type "perl Makefile.PL", "nmake" then "nmake install". Don't
-do an "nmake test" because the I haven't written a test suite yet.
+This installs as part of C<Win32::Security>.  See 
+C<Win32::Security::NamedObject> for more information.
 
 =head1 Function Reference
 
@@ -62,12 +59,13 @@ use strict;
 
 BEGIN {
 	$Win32::Security::SID::ref2old_LookupAccountName = \&Win32::LookupAccountName;
-}
 
-sub Win32::LookupAccountName {
-	my $retval = &$Win32::Security::SID::ref2old_LookupAccountName;
-	$_[3] = substr($_[3], 0, (unpack('xC', $_[3])+2)*4) if $retval;
-	return $retval;
+	local $^W = 0;    # suppress redefining messages.
+	*Win32::LookupAccountName = sub {
+		my $retval = &$Win32::Security::SID::ref2old_LookupAccountName;
+		$_[3] = substr($_[3], 0, (unpack('xC', $_[3])+2)*4) if $retval;
+		return $retval;
+	}
 }
 
 package Win32::Security::SID;
@@ -141,8 +139,9 @@ C</^S(?:-\d+)+$/>), it calls C<ConvertStringSidToSid> and returns that result.
 This should only pose a problem if you have a very weird username and don't pass 
 a domain name.
 
-It uses a cache to remember previously asked for SIDs (LookupAccountName is very 
-processor intensive - watch LSASS.EXE spike if you make a lot of calls).
+It uses a cache to remember previously asked for usernames (C<LookupAccountName> 
+is very processor intensive - watch C<LSASS.EXE> spike if you make a lot of 
+calls).
 
 =cut
 
@@ -180,8 +179,8 @@ C<ConvertNameToSid> is safely suppliable to C<ConvertSidToName>.  It accepts the
 SID in binary format - if you have a SID in string SID format, call 
 C<ConvertStringSidtoSid> first and pass the result.
 
-It uses a cache to remember previously asked for SIDs (LookupAccountSID is very 
-processor intensive - watch LSASS.EXE spike if you make a lot of calls).
+It uses a cache to remember previously asked for SIDs (C<LookupAccountSID> is 
+very processor intensive - watch C<LSASS.EXE> spike if you make a lot of calls).
 
 =cut
 
@@ -200,7 +199,7 @@ sub ConvertSidToName {
 				$cache->{$sid} = $domain ? "$domain\\$username" : $username;
 			}
 		}
-		$cache->{$sid} ||= &ConvertSidToStringSid($sid) || 'BAD_SID';
+		$cache->{$sid} ||= $sid ne '' ? (&ConvertSidToStringSid($sid) || 'BAD_SID') : 'UNDEFINED_SID';
 	}
 
 	return $cache->{$sid};
@@ -210,7 +209,7 @@ sub ConvertSidToName {
 
 =head1 AUTHOR
 
-Toby Ovod-Everett, tovod-everett@alascom.att.com
+Toby Ovod-Everett, toby@ovod-everett.org
 
 =cut
 

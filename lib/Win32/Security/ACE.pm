@@ -11,7 +11,7 @@
 # under the same terms as Perl itself.
 #
 # For comments, questions, bugs or general interest, feel free to
-# contact Toby Ovod-Everett at tovod-everett@alascom.att.com
+# contact Toby Ovod-Everett at toby@ovod-everett.org
 #############################################################################
 
 =head1 NAME
@@ -52,23 +52,21 @@ with Win32 ACEs (Access Control Entries).  The subclasses allow for variation in
 mask behavior (different privileges apply to files than apply to registry keys 
 and so forth) and for variation in ACE behavior (C<OBJECT_ACE_TYPE> varieties).
 
-C<Win32::Security::ACE> uses the flyweight design pattern in conjunction with a 
-persistent cache of demand-computed properties.  The result is that parsing of 
-ACEs is only done for unique ACEs, and that the ACE objects themselves are very 
-lightweight.
+C<Win32::Security::ACE> uses the flyweight design pattern in conjunction with an 
+in-memory cache of demand-computed properties.  The result is that parsing of 
+ACEs is only done once for each unique ACE, and that the ACE objects themselves 
+are very lightweight.  Double-indirection is used in the ACE objects to provide 
+for mutability without invalidating the cache.
 
 =head2 Installation instructions
 
-This installs with MakeMaker as part of C<Win32::Security>.
-
-To install via MakeMaker, it's the usual procedure - download from CPAN,
-extract, type "perl Makefile.PL", "nmake" then "nmake install". Don't
-do an "nmake test" because the I haven't written a test suite yet.
+This installs as part of C<Win32::Security>.  See 
+C<Win32::Security::NamedObject> for more information.
 
 It depends upon C<Class::Prototyped> and C<Data::BitMask>, which should be 
 installable via PPM or available on CPAN.  It also depends upon 
-C<Win32::Security::Raw> and C<Win32::Security::SID> , which is installed as part 
-of C<Win32::Security>.
+C<Win32::Security::Raw> and C<Win32::Security::SID> , which are installed as 
+part of C<Win32::Security>.
 
 
 =head1 ARCHITECTURE
@@ -87,8 +85,8 @@ C<Win32::Security::ACE> uses multiple inheritance in a diamond pattern.  This
 was deemed to be the best solution to an otherwise ugly situation.
 
 Each ACE comes in a variety of forms - six at current count - and some of these 
-forms (notably the OBJECT_ACE_TYPE varieties) use a different internal 
-structure. While the code doesn't currently support the OBJECT_ACE_TYPE 
+forms (notably the C<OBJECT_ACE_TYPE> varieties) use a different internal 
+structure. While the code doesn't currently support the C<OBJECT_ACE_TYPE> 
 varieties, it was important to architect the code to support that for future 
 expansion.
 
@@ -98,12 +96,12 @@ the type of Named Object (think files vs. Active Directory objects).  This
 behavioral variation extends to the realm of applying inherited GENERIC Access 
 Masks to objects.
 
-Much internal debate (I love arguing myself) was expended over attempting to
-reconcile these two orthogonal forms of variation without multiple inheritance
-before deciding to just bite the bullet.
+Much internal debate (I love arguing with myself) was expended over attempting 
+to reconcile these two orthogonal forms of variation without multiple 
+inheritance before deciding to just bite the bullet.
 
 The obvious ugliness is that C<number_of_ace_types * number_of_object_types> 
-classes have to be created.  Luckily, since I'd already made 
+classes have to be created.  Luckily I'd already made 
 C<Win32::Security::Recursor> dependent upon C<Class::Prototyped>, so it was 
 deemed acceptable to make C<Win32::Security::ACE> and C<Win32::Security::ACL> 
 dependent upon it as well.
@@ -124,8 +122,8 @@ and the C<dbmObjectType> methods.
 Abstract base class for behavior linked to the ACE type.  This includes the 
 C</.*[aA]ceType$/>, C</.*[aA]ceFlags$/>, C<sid>, C<trustee>, C<buildRawAce>, and 
 C</^inheritable.*/> methods.  All of the direct subclasses of C<_AceType> are 
-abstract as well.  The name space has been collapsed by leaving out C<_AceType> 
-to keep things manageable.
+abstract as well.  The package names have been collapsed by leaving out 
+C<_AceType> to keep things manageable.
 
 
 =over 4
@@ -144,8 +142,8 @@ Abstract base class for behavior linked to the Named Object type.  This includes
 the C<objectType> and C</.*[aA]ccessMask$/> methods.  In addition, as will later 
 be discussed, each of the following classes is responsible for storing the 
 cached instance data for all ACEs they run into.  Just like in C<_AceType>, all 
-of the direct subclasses of C<_ObjectType> are abstract as well and the name 
-space has been collapsed.
+of the direct subclasses of C<_ObjectType> are abstract as well and the package 
+names have been collapsed.
 
 
 =over 4
@@ -170,17 +168,17 @@ are automatically generated using C<Class::Prototyped>.
 On the typical computer systems, there are very few unique ACEs.  There may be 
 hundred or thousands, but usually there are orders of magnitude fewer ACEs than 
 there are objects to which they are applied.  In order to reduce the computation 
-involved in analyzing them, the C<Win32::Security::ACE> caches all the 
-information computed about each ACE in a central store (actually, multiple 
-central stores - one for each Named Object type) based on the binary form 
-(C<rawAce>).  The object returned by a call to C<new> is a scalar reference to 
-the anonymous hash for that C<rawAce> in the central store.  Because it isn't a 
-direct reference to the hash, it is possible to switch which hash the object 
-points to on the fly.  This allows the C<Win32::Security::ACE> objects to be 
-mutable while maintaining the immutability of the central store.  It also makes 
-each individual C<Win32::Security::ACE> object incredibly lightweight, since it 
-is only composed of a single blessed scalar.  The properties are computed as 
-needed, but the results are cached in the central store.
+involved in analyzing them, C<Win32::Security::ACE> caches all the information 
+computed about each ACE in a central store (actually, multiple central stores - 
+one for each Named Object type) based on the binary form (C<rawAce>).  The 
+object returned by a call to C<new> is a reference to a reference to the hash 
+for that C<rawAce> in the central store.  Because it isn't a direct reference to 
+the hash, it is possible to switch which hash the object points to on the fly.  
+This allows the C<Win32::Security::ACE> objects to be mutable while maintaining 
+the immutability of the central store.  It also makes each individual 
+C<Win32::Security::ACE> object incredibly lightweight, since it is only composed 
+of a single blessed scalar.  The properties are computed as needed, but the 
+results are cached in the central store.
 
 For instance, once C<explainAccessMask> has been computed for a given C<rawAce>, 
 it can be found from the object as C<< $$self->{explainAccessMask} >>.  This 
@@ -205,8 +203,9 @@ not cloned, however, so be careful there.
 =cut
 
 use Carp qw();
-use Class::Prototyped;
-use Data::BitMask;
+use Class::Prototyped '0.98';
+use Data::BitMask '0.13';
+use Data::Dumper;
 use Win32::Security::Raw;
 use Win32::Security::SID;
 
@@ -301,7 +300,7 @@ C<accessMask>, and either the C<sid> or C<trustee>.  The C<aceType>,
 C<aceFlags>, and C<accessMask> can be passed as integers or in any acceptable 
 format for C<Data::BitMask> (i.e. C<'|'> separated constants in a string, an 
 anonmous array of constants, or an anonymous hash of constants).  See 
-C<buildRawMask> for more information.
+C<Data::BitMask::buildRawMask> for more information.
 
 =cut
 
@@ -363,6 +362,31 @@ Win32::Security::ACE->reflect->addSlot(
 );
 
 
+=head2 C<dump>
+
+This returns a dump of the C<Win32::Security::ACL> object in a format useful for 
+debugging.
+
+=cut
+
+Win32::Security::ACE->reflect->addSlot(
+	dump => sub {
+		my $self = shift;
+		my(%params) = @_;
+
+		my $args = join(", ", map { $_ ne '' ? "'$_'" : 'undef' }
+				$params{hide_objectType} ? () : ($self->objectType()),
+				$self->aceType(),
+				join("|", sort keys %{$self->explainAceFlags()}),
+				join("|", sort keys %{$self->explainAccessMask()}),
+				$self->trustee() || 'undef',
+			);
+		$params{hide_instantiation} and return $args;
+		return "Win32::Security::ACE->new($args)";
+	},
+);
+
+
 =head2 C<rawAce>
 
 Returns the binary string form of the ACE.  If passed a value, changes
@@ -389,9 +413,9 @@ Win32::Security::ACE->reflect->addSlot(
 =head2 C<dbmAceType>
 
 Returns the C<Data::BitMask> object for interacting with ACE Types.  Standard 
-Win32 constants for C<ACE_TYPE> along with several aliases.  The standard 
-C<ACE_TYPE> constants are C<ACCESS_ALLOWED_ACE_TYPE>, C<ACCESS_DENIED_ACE_TYPE>, 
-C<SYSTEM_AUDIT_ACE_TYPE>, C<SYSTEM_ALARM_ACE_TYPE>, 
+Win32 constants for C<ACE_TYPE> are supported along with several aliases.  The 
+standard C<ACE_TYPE> constants are C<ACCESS_ALLOWED_ACE_TYPE>, 
+C<ACCESS_DENIED_ACE_TYPE>, C<SYSTEM_AUDIT_ACE_TYPE>, C<SYSTEM_ALARM_ACE_TYPE>, 
 C<ACCESS_ALLOWED_COMPOUND_ACE_TYPE>, C<ACCESS_ALLOWED_OBJECT_ACE_TYPE>, 
 C<ACCESS_DENIED_OBJECT_ACE_TYPE>, C<SYSTEM_AUDIT_OBJECT_ACE_TYPE>, 
 C<SYSTEM_ALARM_OBJECT_ACE_TYPE>, C<ACCESS_MIN_MS_ACE_TYPE>, 
@@ -524,10 +548,10 @@ constant, such as C<'ACCESS_ALLOWED_ACE_TYPE'> or C<'ACCESS_DENIED_ACE_TYPE'>).
 =head2 C<dbmAceFlags>
 
 Returns the C<Data::BitMask> object for interacting with ACE Flags.  Standard 
-Win32 constants for C<ACE_FLAGS> along with some aliases.  The standard 
-C<ACE_FLAGS> constants are C<OBJECT_INHERIT_ACE>, C<CONTAINER_INHERIT_ACE>, 
-C<NO_PROPAGATE_INHERIT_ACE>, C<INHERIT_ONLY_ACE>, C<INHERITED_ACE>, 
-C<SUCCESSFUL_ACCESS_ACE_FLAG>, and C<FAILED_ACCESS_ACE_FLAG>.
+Win32 constants for C<ACE_FLAGS> are supported along with some aliases.  The 
+standard C<ACE_FLAGS> constants are C<OBJECT_INHERIT_ACE>, 
+C<CONTAINER_INHERIT_ACE>, C<NO_PROPAGATE_INHERIT_ACE>, C<INHERIT_ONLY_ACE>, 
+C<INHERITED_ACE>, C<SUCCESSFUL_ACCESS_ACE_FLAG>, and C<FAILED_ACCESS_ACE_FLAG>.
 
 The aliases are:
 
@@ -535,11 +559,35 @@ The aliases are:
 
 =item * 
 
+C<SUBFOLDERS_AND_FILES_ONLY> (C<CONTAINER_INHERIT_ACE | INHERIT_ONLY_ACE | OBJECT_INHERIT_ACE>)
+
+=item * 
+
 C<FULL_INHERIT> or C<FI> (C<OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE>)
 
 =item *
 
-C<FILES_ONLY_NO_INHERIT> (C<OBJECT_INHERIT_ACE | NO_PROPAGATE_INHERIT_ACE>)
+C<FILES_ONLY> (C<INHERIT_ONLY_ACE | OBJECT_INHERIT_ACE>)
+
+=item *
+
+C<SUBFOLDERS_ONLY> (C<CONTAINER_INHERIT_ACE | INHERIT_ONLY_ACE>)
+
+=item *
+
+C<CI> (C<CONTAINER_INHERIT_ACE>)
+
+=item *
+
+C<OI> (C<OBJECT_INHERIT_ACE>)
+
+=item *
+
+C<IO> (C<INHERIT_ONLY_ACE>)
+
+=item *
+
+C<NP> (C<NO_PROPAGATE_INHERIT_ACE>)
 
 =back
 
@@ -558,12 +606,18 @@ Win32::Security::ACE::_AceType->reflect->addSlot(
 );
 
 Win32::Security::ACE::_AceType->dbmAceFlags()->add_constants(
-	FULL_INHERIT =>          Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('OBJECT_INHERIT_ACE CONTAINER_INHERIT_ACE'),
-	FILES_ONLY_NO_INHERIT => Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('OBJECT_INHERIT_ACE NO_PROPAGATE_INHERIT_ACE'),
+	SUBFOLDERS_AND_FILES_ONLY => Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('CONTAINER_INHERIT_ACE INHERIT_ONLY_ACE OBJECT_INHERIT_ACE'),
+	FULL_INHERIT =>              Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('CONTAINER_INHERIT_ACE OBJECT_INHERIT_ACE '),
+	FILES_ONLY =>                Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('INHERIT_ONLY_ACE OBJECT_INHERIT_ACE'),
+	SUBFOLDERS_ONLY =>           Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('CONTAINER_INHERIT_ACE INHERIT_ONLY_ACE'),
 );
 
 Win32::Security::ACE::_AceType::dbmAceFlags()->add_constants(
-	FI =>                    Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('FULL_INHERIT'),
+	FI => Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('FULL_INHERIT'),
+	CI => Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('CONTAINER_INHERIT_ACE'),
+	OI => Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('OBJECT_INHERIT_ACE'),
+	IO => Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('INHERIT_ONLY_ACE'),
+	NP => Win32::Security::ACE::_AceType->dbmAceFlags()->build_mask('NO_PROPAGATE_INHERIT_ACE'),
 );
 
 
@@ -680,6 +734,10 @@ Win32::Security::ACE::_AceType->reflect->addSlot(
 Returns the Trustee for the SID as generated by 
 C<Win32::Security::SID::ConvertSidToName>.
 
+If called with a passed parameter, mutates the ACE to that new trustee.  Both C<sid> 
+and C<trustee> accepts SID and Trustee names as passed parameters when used as a 
+setter.
+
 =cut
 
 Win32::Security::ACE::_AceType->reflect->addSlot(
@@ -715,7 +773,7 @@ Win32::Security::ACE::_AceType->reflect->addSlot(
 
 =item C<ACCESS_ALLOWED_ACE_TYPE>, C<ACCESS_DENIED_ACE_TYPE>, C<SYSTEM_AUDIT_ACE_TYPE>
 
-These accept AceFlags, AccessMask, and either Sid or Trustee.
+These accept C<AceFlags>, C<AccessMask>, and either C<Sid> or C<Trustee>.
 
 =cut
 
@@ -728,8 +786,11 @@ Win32::Security::ACE::ACCESS_ALLOWED_ACE_TYPE->reflect->addSlot(
 		$@ and die "Unable to parse AceFlags value '$aceFlags': $@";
 		eval { $accessMask = $class->dbmAccessMask()->build_mask($accessMask); };
 		$@ and die "Unable to parse AccessMask value '$accessMask': $@";
-		my $sid = ($trustee =~ /^[\01-\03]/) ? $trustee : &Win32::Security::SID::ConvertNameToSid($trustee);
-		$sid or die "Unable to parse Trustee/SID value '$trustee'.";
+		my $sid;
+		if (defined $trustee) {
+			$sid = ($trustee =~ /^[\01-\03]/) ? $trustee : &Win32::Security::SID::ConvertNameToSid($trustee);
+			$sid or die "Unable to parse Trustee/SID value '$trustee'.";
+		}
 
 		return pack("CCSL", $class->rawAceType(), $aceFlags, length($sid) + 8, $accessMask).$sid;
 	},
@@ -751,11 +812,11 @@ Win32::Security::ACE::SYSTEM_AUDIT_ACE_TYPE->reflect->addSlot(
 =head2 C<buildRawAceNamed>
 
 Creates a binary string ACE from named parameters.  This should B<always> be 
-called on a full class (i.e. C<Win32::Security::ACE::$objectType::$aceType>) OR 
-on an existing ACE.  Each implementation accepts different parameters.  If 
-called on an existing ACE, missing parameters will be substituted for.  As an 
-example, to create a new rawAce value based on an existing ACE, but with the 
-Access Mask set to C<READ>:
+called on a full class (i.e. C<Win32::Security::ACE::$objectType::$aceType>) 
+B<or> on an existing ACE.  Each implementation accepts different parameters.  If 
+called on an existing ACE, missing parameters will be supplied from the existing 
+ACE.  As an example, to create a new C<rawAce> value based on an existing ACE, 
+but with the Access Mask set to C<READ>:
 
     $ace->buildRawAceNamed(accessMask => 'READ');
 
@@ -790,8 +851,16 @@ Win32::Security::ACE::ACCESS_ALLOWED_ACE_TYPE->reflect->addSlot(
 		$@ and die "Unable to parse AceFlags value '$params{aceFlags}': $@";
 		my $accessMask = eval { exists $params{accessMask} ? $class->dbmAccessMask()->build_mask($params{accessMask}) : (ref($source) ? $source->rawAccessMask() : 0); };
 		$@ and die "Unable to parse AccessMask value '$params{accessMask}': $@";
-		my $sid = exists $params{trustee} ? ($params{trustee} =~ /^[\01-\03]/) ? $params{trustee} : &Win32::Security::SID::ConvertNameToSid($params{trustee}) : (ref($source) ? $source->sid() : undef);
-		$sid or die "Unable to parse Trustee/SID value '$params{trustee}'.";
+
+		my $sid;
+		if (exists $params{trustee}) {
+			if (defined $params{trustee}) {
+				$sid = ($params{trustee} =~ /^[\01-\03]/) ? $params{trustee} : &Win32::Security::SID::ConvertNameToSid($params{trustee});
+				$sid or die "Unable to parse Trustee/SID value '$params{trustee}'.";
+			}
+		} else {
+			$sid = ref($source) ? $source->sid() : undef;
+		}
 
 		return pack("CCSL", $class->rawAceType(), $aceFlags, length($sid) + 8, $accessMask).$sid;
 	},
@@ -846,12 +915,14 @@ Win32::Security::ACE::SYSTEM_AUDIT_ACE_TYPE->reflect->addSlot(
 Accepts a type (either C<'OBJECT'> or C<'CONTAINER'>) and calls
 C<inheritable_OBJECT> or C<inheritable_CONTAINER> as appropriate.
 
-Those methods return the list of ACEs that would be inherited by a newly
-created child C<OBJECT> or C<CONTAINER> if the parent has this ACE.  In most
-cases, there will be either none (non-inheritable ACE) or one (inheritable ACE)
-ACEs returned.  In the case of C<INHERIT_ONLY_ACE>s on containers, there may be
-two ACEs returned (one to perpetuate the C<INHERIT_ONLY_ACE> and one to
-implement the permissions on the container).
+Those methods return the list of ACEs that would be inherited by a newly created 
+child C<OBJECT> or C<CONTAINER> if the parent has this ACE.  In most cases, 
+there will be either none (non-inheritable ACE) or one (inheritable ACE) ACEs 
+returned.  In the case of ACEs that use C<GENERIC_.*> permissions or that use 
+C<CREATOR OWNER>, there may be two ACEs returned - one to implement the 
+permissions on that specific container, and the other to perpetuate the 
+inheritable ACE.  In the case of an C<CREATOR OWNER> ACE, the ACE that 
+implements the actual permissions on the container will be given a null SID.
 
 The methods take care of checking the flags to determine whether the ACE should
 be inherited as well as adjusting the flags for any inherited ACE appropriately.
@@ -859,9 +930,9 @@ be inherited as well as adjusting the flags for any inherited ACE appropriately.
 Note that it is not sufficient to simply concatenate the ACEs of a DACL to 
 generate the inheritable DACL because Win2K and WinXP remove occluded 
 permissions (for instance, if an container has an inherited permission granting 
-C<READ> access to Domain Users and someone grants explicit and inherited C<FULL> 
-access to Domain Users to that container, child objects will not receive the 
-inherited C<READ> access because it is fully occluded by the also inherited 
+C<READ> access to Domain Users and someone grants explicit fully-inheritable 
+C<FULL> access to Domain Users to that container, child objects will not receive 
+the inherited C<READ> access because it is fully occluded by the also inherited 
 C<FULL> access).
 
 =cut
@@ -897,33 +968,44 @@ Win32::Security::ACE::_AceType->reflect->addSlot(
 
 			$thing->{inheritable_CONTAINER} = [];
 
-			if ($aceFlags->{OBJECT_INHERIT_ACE} || $aceFlags->{CONTAINER_INHERIT_ACE}) {
-				if ($aceFlags->{INHERIT_ONLY_ACE} && $aceFlags->{CONTAINER_INHERIT_ACE}) {
-					my $new_flags = {%{$aceFlags}};
-					$new_flags->{INHERIT_ONLY_ACE} = 0;
-					$new_flags->{OBJECT_INHERIT_ACE} = 0;
-					$new_flags->{CONTAINER_INHERIT_ACE} = 0;
+			if ($aceFlags->{CONTAINER_INHERIT_ACE} || ($aceFlags->{OBJECT_INHERIT_ACE} && !$aceFlags->{NO_PROPAGATE_INHERIT_ACE})) {
+				my $rawCleansedAccessMask = $self->dbmAccessMask()->build_mask($self->cleansedAccessMask());
+				my $trustee = $self->trustee();
+
+				if ($rawCleansedAccessMask == $self->rawAccessMask() && $trustee ne 'CREATOR OWNER') {
+					my $new_flags = {%$aceFlags};
 					$new_flags->{INHERITED_ACE} = 1;
-
+					$new_flags->{INHERIT_ONLY_ACE} = $aceFlags->{CONTAINER_INHERIT_ACE} ? 0 : 1;
+					if ($aceFlags->{NO_PROPAGATE_INHERIT_ACE}) {
+						$new_flags->{CONTAINER_INHERIT_ACE} = 0;
+						$new_flags->{OBJECT_INHERIT_ACE} = 0;
+						$new_flags->{NO_PROPAGATE_INHERIT_ACE} = 0;
+					}
 					push( @{$thing->{inheritable_CONTAINER}},
-								Win32::Security::ACE->new($self->objectType(), $self->rawAceType(), $new_flags, $self->cleansedAccessMask(), $self->sid()) );
+								Win32::Security::ACE->new($self->objectType(), $self->rawAceType(), $new_flags, $rawCleansedAccessMask, $self->sid()) );
+				} else {
+					if ($aceFlags->{CONTAINER_INHERIT_ACE}) {
+						my $new_flags = {%$aceFlags};
+						$new_flags->{INHERITED_ACE} = 1;
+						$new_flags->{INHERIT_ONLY_ACE} = 0;
+						$new_flags->{OBJECT_INHERIT_ACE} = 0;
+						$new_flags->{CONTAINER_INHERIT_ACE} = 0;
+						$new_flags->{NO_PROPAGATE_INHERIT_ACE} = 0;
+						push( @{$thing->{inheritable_CONTAINER}},
+									Win32::Security::ACE->new($self->objectType(), $self->rawAceType(), $new_flags, $rawCleansedAccessMask, $trustee eq 'CREATOR OWNER' ? undef : $self->sid()) );
+					}
+
+					if (!$aceFlags->{NO_PROPAGATE_INHERIT_ACE}) {
+						my $new_flags = {%$aceFlags};
+						$new_flags->{INHERITED_ACE} = 1;
+						$new_flags->{INHERIT_ONLY_ACE} = 1;
+
+						push( @{$thing->{inheritable_CONTAINER}},
+									Win32::Security::ACE->new($self->objectType(), $self->rawAceType(), $new_flags, $self->rawAccessMask(), $self->sid()) );
+					}
 				}
-
-				my $new_flags = {%{$aceFlags}};
-
-				if ($new_flags->{NO_PROPAGATE_INHERIT_ACE}) {
-					$new_flags->{CONTAINER_INHERIT_ACE} = 0;
-					$new_flags->{OBJECT_INHERIT_ACE} = 0;
-				}
-				$new_flags->{INHERITED_ACE} = 1;
-
-				unless ($aceFlags->{CONTAINER_INHERIT_ACE}) {
-					$new_flags->{INHERIT_ONLY_ACE} = 1;
-				}
-
-				push( @{$thing->{inheritable_CONTAINER}},
-							Win32::Security::ACE->new($self->objectType(), $self->rawAceType(), $new_flags, $self->rawAccessMask(), $self->sid()) );
 			}
+
 		}
 		return(map {bless(\(my $o = $$_), ref($_))} @{$thing->{inheritable_CONTAINER}});
 	},
@@ -955,8 +1037,10 @@ Win32::Security::ACE::_AceType->reflect->addSlot(
 				$new_flags->{NO_PROPAGATE_INHERIT_ACE} = 0;
 				$new_flags->{INHERITED_ACE} = 1;
 
+				my $trustee = $self->trustee();
+
 				push( @{$thing->{inheritable_OBJECT}},
-							Win32::Security::ACE->new($self->objectType(), $self->rawAceType(), $new_flags, $self->cleansedAccessMask(), $self->sid()) );
+							Win32::Security::ACE->new($self->objectType(), $self->rawAceType(), $new_flags, $self->cleansedAccessMask(), $trustee eq 'CREATOR OWNER' ? undef : $self->sid()) );
 			}
 		}
 		return(map {bless(\(my $o = $$_), ref($_))} @{$thing->{inheritable_OBJECT}});
@@ -1106,6 +1190,8 @@ C<KEY_ENUMERATE_SUB_KEYS>, C<KEY_NOTIFY>, C<KEY_CREATE_LINK>, C<KEY_WOW64_64>,
 C<KEY_WOW64_32KEY>, C<KEY_READ>, C<KEY_WRITE>, C<KEY_EXECUTE>, and
 C<KEY_ALL_ACCESS>.
 
+C<SE_REGISTRY_KEY> support is still under development.
+
 =cut
 
 Win32::Security::ACE::SE_REGISTRY_KEY->reflect->addSlot(
@@ -1246,8 +1332,8 @@ setter.
 
 =head2 C<cleansedAccessMask>
 
-This returns a cleansed Access Mask for the ACE in question, based on the 
-C<objectType>.  Some of the Object Types define special behavior for this.
+This returns an Access Mask cleansed of C<GENERIC_> permissions for the ACE in 
+question.  Some of the Object Types define special behavior for this.
 
 =over 4
 
@@ -1308,7 +1394,7 @@ Win32::Security::ACE::SE_FILE_OBJECT->reflect->addSlot(
 
 =head1 AUTHOR
 
-Toby Ovod-Everett, tovod-everett@alascom.att.com
+Toby Ovod-Everett, toby@ovod-everett.org
 
 =cut
 

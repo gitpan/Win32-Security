@@ -11,7 +11,7 @@
 # under the same terms as Perl itself.
 #
 # For comments, questions, bugs or general interest, feel free to
-# contact Toby Ovod-Everett at tovod-everett@alascom.att.com
+# contact Toby Ovod-Everett at toby@ovod-everett.org
 #############################################################################
 
 =head1 NAME
@@ -84,49 +84,28 @@ without the need for explicit subclassing.
 
 =head2 Installation instructions
 
-This installs with MakeMaker as part of Win32::Security.
-
-To install via MakeMaker, it's the usual procedure - download from CPAN,
-extract, type "perl Makefile.PL", "nmake" then "nmake install". Don't
-do an "nmake test" because the I haven't written a test suite yet.
+This installs as part of C<Win32::Security>.  See 
+C<Win32::Security::NamedObject> for more information.
 
 It depends upon the other C<Win32::Security> modules and C<Class::Prototyped>.
 
 
 =head1 ARCHITECTURE
 
+The docs for this module are still under development.  The documentation present 
+is correct, but to really understand the module you need to look at the source.
+
 =head2 Subclass Organization
 
-There are subclasses of C<Win32::Security::Recursor> for each type of supported
-C<Win32::Security::NamedObject> (i.e. C<'FILE'> for now).  The subclasses are
-responsible for implementing hierarchy specific behavior, such as enumerating
-child nodes, determining whether a node is a container, etc.
-
-=head2 C<$node_info> Hashes
-
-In order to facilitate information sharing between the various methods, 
-C<$node_info> hashes are passed around.  In order to avoid the hit of object
-instantiation, and to some extent to simplify the code, the C<$node_info>
-hashes are not first-class objects.  Their behavior is accessed through the
-recursor object.  For example, to retrieve the DACL from a C<$node_info> hash,
-where C<$self> is the recursor, one would call C<node_dacl> like so:
-
-    $self->node_dacl($node_info);
-
-To improve performance by reducing the number of method calls, that can be
-shortened to:
-
-    $node_info->{dacl} || $self->node_dacl($node_info);
-
-
-
-
-Each C<Win32::Security::Recursor> object is designed to do one thing - accept
-an object name and recurse down into it.
+There are subclasses of C<Win32::Security::Recursor> for each type of supported 
+C<Win32::Security::NamedObject> (i.e. C<'SE_FILE_OBJECT'> for now - 
+C<'SE_REGISTRY_KEY'> is not yet supported).  The subclasses are responsible for 
+implementing hierarchy specific behavior, such as enumerating child nodes, 
+determining whether a node is a container, etc.
 
 =cut
 
-use Class::Prototyped;
+use Class::Prototyped '0.98';
 use Win32::File;
 use Win32::Security::NamedObject;
 
@@ -174,21 +153,22 @@ this:
 =item * Calls C<node_filternode> on current node
 
 Calls C<node_filternode> to filter individual node.  If C<node_filternode> 
-returns true, execution proceeds through the loop.  Call to C<node_filternode> 
-traps C<die> with an C<eval>, so a C<die> is treated like a false value.  If the 
-call fails or C<die>s, then the node is popped off of the array and the loop
-restarted.  This happens here to that C<node_filternode> filters the nodes in
-the proper order so that any output is sorted appropriately.
+returns true, execution proceeds through the loop.  The call to 
+C<node_filternode> traps C<die> with an C<eval>, so a C<die> is treated like a 
+false value.  If the call fails or C<die>s, then the node is popped off of the 
+array and the loop restarted.  This happens here to that C<node_filternode> 
+filters the nodes in the proper order so that any output is sorted 
+appropriately.
 
 =item * Calls C<payload> on current node
 
 The call to C<payload> is wrapped in an C<eval> and any returned C<$@> is 
-printed to <STDERR> if C<< $self->debug() >> is true.
+printed to C<STDERR> if C<< $self->debug() >> is true.
 
 =item * Determines list of child nodes and pushes them onto the array
 
 This whole procedure is wrapped in an C<eval>.  If any part of it fails, any 
-returned C<$@> is printed to <STDERR> if C<< $self->debug() >> is true and then 
+returned C<$@> is printed to C<STDERR> if C<< $self->debug() >> is true and then 
 the last node is popped off of the array.  The code first calls 
 C<node_iscontainer>, and if false simply pops the last node off the array.  
 Otherwise, C<node_enumchildren> is called to build a list of child nodes (each 
@@ -268,7 +248,7 @@ Win32::Security::Recursor->reflect->addSlots(
 
 =head2 C<debug>
 
-This defaults to true.  Pass in C<< [qw(debug constant)] => 0, >> to C<new> to 
+This defaults to true.  Pass in "C<< [qw(debug constant)] => 0, >>" to C<new> to 
 turn C<debug> off.
 
 =cut
@@ -793,12 +773,23 @@ sub Win32::Security::Recursor::SE_FILE_OBJECT::PermDump::new {
 
 			$self->payload_count($self->payload_count()+1);
 
-			my($node_name, $node_iscontainer, $node_namedobject, $node_dacl,
-					$cont_namedobject, $cont_dacl) =
-				$self->node_getinfo(
-					node   => [qw(name iscontainer namedobject dacl)],
-					parent => [qw(namedobject dacl)],
-				);
+			my($node_name, $node_iscontainer, $node_namedobject, $node_dacl, $node_ownerTrustee,
+					$cont_namedobject, $cont_dacl, $cont_ownerTrustee);
+			if ($options->{owner}) {
+				($node_name, $node_iscontainer, $node_namedobject, $node_dacl, $node_ownerTrustee,
+						$cont_namedobject, $cont_dacl, $cont_ownerTrustee) =
+					$self->node_getinfo(
+						node   => [qw(name iscontainer namedobject dacl ownerTrustee)],
+						parent => [qw(namedobject dacl ownerTrustee)],
+					);
+			} else {
+				($node_name, $node_iscontainer, $node_namedobject, $node_dacl,
+						$cont_namedobject, $cont_dacl) =
+					$self->node_getinfo(
+						node   => [qw(name iscontainer namedobject dacl)],
+						parent => [qw(namedobject dacl)],
+					);
+			}
 
 			my $inheritance_blocked = $node_namedobject->control()->{SE_DACL_PROTECTED};
 
@@ -809,11 +800,6 @@ sub Win32::Security::Recursor::SE_FILE_OBJECT::PermDump::new {
 			my(@ace_comparison) = $node_dacl->compareInherited($inheritable, 1);
 
 			if ($options->{owner}) {
-				my ($node_ownerTrustee, $cont_ownerTrustee) = 
-					$self->node_getinfo(
-						0, 'ownerTrustee', 1, 'ownerTrustee'
-					);
-
 				if ($options->{inherited} || $cont_ownerTrustee ne $node_ownerTrustee) {
 					$self->dump_line(name => $node_name, trustee => $node_ownerTrustee, accessMask => 'OWNER', desc => $node_iscontainer ? 'DO' : 'FO');
 				}
@@ -864,6 +850,8 @@ sub Win32::Security::Recursor::SE_FILE_OBJECT::PermDump::new {
 		dump_line => sub {
 			my $self = shift;
 			my(%data) = @_;
+
+			local($^W) = 0; #Clear warnings about uninitialized values.
 
 			$self->print(join($options->{csv} ? "," : "\t",
 							map {my $x = $_; $x =~ s/\"/\"\"/g; $x = '"'.$x.'"' if $x =~ /[\"\', ]/; $x}
@@ -953,7 +941,7 @@ sub Win32::Security::Recursor::SE_FILE_OBJECT::PermDump::new {
 
 =head1 AUTHOR
 
-Toby Ovod-Everett, tovod-everett@alascom.att.com
+Toby Ovod-Everett, toby@ovod-everett.org
 
 =cut
 

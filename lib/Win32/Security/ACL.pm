@@ -11,7 +11,7 @@
 # under the same terms as Perl itself.
 #
 # For comments, questions, bugs or general interest, feel free to
-# contact Toby Ovod-Everett at tovod-everett@alascom.att.com
+# contact Toby Ovod-Everett at toby@ovod-everett.org
 #############################################################################
 
 =head1 NAME
@@ -30,21 +30,18 @@ C<Win32::Security::ACL> - Win32 ACL manipulation
 C<Win32::Security::ACL> and its subclasses provide an interface for interacting 
 with Win32 ACLs (Access Control Lists).  The subclasses allow for variation in 
 mask behavior (different privileges apply to files than apply to registry keys 
-and so forth).  Note that it is still in development, so for now support for 
-modification of ACLs is pretty much non-existent.
+and so forth).
 
-C<Win32::Security::ACL> uses the flyweight design pattern in conjunction with a 
-persistent cache of demand-computed properties.  The result is that parsing of 
-ACLs is only done for unique ACLs, and that the ACL objects themselves are very 
-lightweight.
+C<Win32::Security::ACL> uses the flyweight design pattern in conjunction with an 
+in-memory cache of demand-computed properties.  The result is that parsing of 
+ACLs is only done once for each unique ACL, and that the ACL objects themselves 
+are very lightweight.  Double-indirection is used in the ACL objects to provide 
+for mutability without invalidating the cache.
 
 =head2 Installation instructions
 
-This installs with MakeMaker as part of C<Win32::Security>.
-
-To install via MakeMaker, it's the usual procedure - download from CPAN,
-extract, type "perl Makefile.PL", "nmake" then "nmake install". Don't
-do an "nmake test" because the I haven't written a test suite yet.
+This installs as part of C<Win32::Security>.  See 
+C<Win32::Security::NamedObject> for more information.
 
 It depends upon C<Class::Prototyped> which should be installable via PPM or 
 available on CPAN.  It also depends upon C<Win32::Security::ACE> , which is 
@@ -90,9 +87,9 @@ there are objects to which they are applied.  In order to reduce the computation
 involved in analyzing them, the C<Win32::Security::ACL> caches all the 
 information computed about each ACL in a central store (actually, multiple 
 central stores - one for each Named Object type) based on the binary form 
-(C<rawAcl>).  The object returned by a call to C<new> is a scalar reference to 
-the anonymous hash for that C<rawAcl> in the central store.  Because it isn't a 
-direct reference to the hash, it is possible to switch which hash the object 
+(C<rawAcl>).  The object returned by a call to C<new> is a a reference to a 
+reference to the hash for that C<rawAcl> in the central store.  Because it isn't 
+a direct reference to the hash, it is possible to switch which hash the object 
 points to on the fly.  This allows the C<Win32::Security::ACL> objects to be 
 mutable while maintaining the immutability of the central store.  It also makes 
 each individual C<Win32::Security::ACL> object incredibly lightweight, since it 
@@ -119,14 +116,16 @@ That means that the results of C<< $acl->aces() >> can be safely manipulated
 without harming the ACL, but that the results of C<< $$acl->{aces} >> should be 
 treated as read-only.
 
-C<Win32::Security::ACL> objects returned are C<clone>d (using inlined code to 
-reduce the performance hit).  The values returned from the C</^dbm.*/> calls are 
-not cloned, however, so be careful there.
+C<Win32::Security::ACL> and C<Win32::Security::ACE> objects returned are 
+C<clone>d (using inlined code to reduce the performance hit).  The values 
+returned from the C</^dbm.*/> calls are not cloned, however, so be careful 
+there.
 
 =cut
 
 use Carp qw();
-use Class::Prototyped;
+use Class::Prototyped '0.98';
+use Data::Dumper;
 use Win32::Security::ACE;
 
 use strict;
@@ -247,10 +246,27 @@ Win32::Security::ACL->reflect->addSlot(
 );
 
 
+=head2 C<dump>
+
+This returns a dump of the C<Win32::Security::ACL> object in a format useful for 
+debugging.
+
+=cut
+
+Win32::Security::ACL->reflect->addSlot(
+	dump => sub {
+		my $self = shift;
+
+		my $aces = join(",\n", map {"    [".$_->dump(hide_objectType => 1, hide_instantiation => 1)."]"} $self->aces());
+		return "Win32::Security::ACL->new('" . $self->objectType . "'" . ($aces ne '' ? ",\n$aces\n  " : '') .")"
+	},
+);
+
+
 =head2 C<dbmObjectType>
 
 Returns the C<Data::BitMask> object for interacting with Named Object Types.  
-See C<Win32::Security::ACE->dbmObjectType()> for more explanation.
+See C<< Win32::Security::ACE->dbmObjectType() >> for more explanation.
 
 =cut
 
@@ -349,9 +365,13 @@ Returns a list of C<Win32::Security::ACE> objects.  The ACEs are in the same
 order as they are in the ACL.
 
 It accepts an optional filter.  The filter should be an anonymous subroutine 
-that looks for the ACE in C<$_> like C<grep> does.  The returned ACEs are 
-C<clone>d to ensure that modifications to them do not modify the cached ACE 
-values for that ACL.
+that looks for the ACE in C<$_> and that returns true or false like the block 
+passed to C<grep> does (note that unlike C<< grep {} @list >>, it is neccessary 
+to specify C<sub> to ensure that the block is interpreted as an anonymous 
+subroutine and not an anonymous hash).  The returned ACEs are C<clone>d to 
+ensure that modifications to them do not modify the cached ACE values for that 
+ACL (this is done B<before> passing them to the optional anonymous subroutine, 
+so it is safe for that subroutine to modify the ACEs).
 
 =cut
 
@@ -391,16 +411,65 @@ Win32::Security::ACL->reflect->addSlot(
 );
 
 
+=head2 C<has_creatorowner>
+
+Returns 1 if the ACL in question contains a dreaded and evil C<CREATOR OWNER> 
+ACE, 0 if it doesn't.
+
+=cut
+
+Win32::Security::ACL->reflect->addSlot(
+	has_creatorowner => sub {
+		my $self = shift;
+		my $thing = $$self;
+
+		unless (exists $thing->{has_creatorowner}) {
+			$thing->{has_creatorowner} = scalar(grep {$_->trustee() eq 'CREATOR OWNER'} $self->aces()) ? 1 : 0;
+		}
+		return $thing->{has_creatorowner};
+	},
+);
+
+
+=head2 C<sids>
+
+Returns a list of all unique SIDs present in the ACL, except for C<CREATOR 
+OWNER> and the null SID.
+
+=cut
+
+Win32::Security::ACL->reflect->addSlot(
+	sids => sub {
+		my $self = shift;
+		my $thing = $$self;
+
+		unless (exists $thing->{sids}) {
+			my %sids;
+			@sids{ grep {$_ ne '' && $_ ne "\01\01\00\00\00\00\00\03\00\00\00\00"} map {$_->sid()} $self->aces() } = undef;
+			$thing->{sids} = [sort keys %sids];
+		}
+		return @{$thing->{sids}};
+	},
+);
+
 =head2 C<inheritable>
 
 Accepts a type (either C<'OBJECT'> or C<'CONTAINER'>).  Returns the list of ACEs 
 that would be inherited by a newly created child C<OBJECT> or C<CONTAINER> if 
-the parent has this ACL.  It handle occluded permissions properly (for instance, 
-if an container has an inherited permission granting READ access to Domain Users 
-and someone adds an explicit and inherited FULL access to Domain Users to that 
-container, child objects will not receive the inherited READ access because it 
-is fully occluded by the also inherited FULL access).  As in C<aces>, the 
-returned ACEs are C<clone>d for safety.
+the parent has this ACL.  It handles occluded permissions properly (I hope).  
+For instance, if an container has an inherited permission granting C<READ> 
+access to Domain Users and someone adds explicit fully-inheritable C<FULL> 
+access to Domain Users to that container, child objects will not receive the 
+inherited C<READ> access because it is fully occluded by the also inherited 
+C<FULL> access.  The exact algorithms for this had to be developed through trial 
+and error as I could find no documentation on the exact behavior.  As in 
+C<aces>, the returned ACEs are C<clone>d for safety.
+
+If the ACL in question contains a dreaded and evil C<CREATOR OWNER> ACE and the
+ACE applies to the object in question, then a placeholder ACE is returned with
+a null SID - the null SID should be replaced with whatever the appropriate
+trustee might be.  This may be in addition to the inheritable C<CREATOR OWNER>
+ACE itself.
 
 =cut
 
@@ -417,14 +486,49 @@ Win32::Security::ACL->reflect->addSlot(
 			my(@newAces);
 			my $sidHash;
 
+			local($^W) = 0; #Turn off warnings about unitialized values
+
 			foreach my $ace (map {$_->$call()} $self->aces()) {
 				my $sid = $ace->sid();
 				my $rawAccessMask = $ace->rawAccessMask();
-				if (	($type eq 'CONTAINER' && $ace->aceFlags()->{INHERIT_ONLY_ACE}) ||
-							!exists $sidHash->{$sid} ||
-							!scalar(grep {($_ & $rawAccessMask) == $rawAccessMask} @{$sidHash->{$sid}})
+				my $aceFlags = $ace->aceFlags();
+
+				my $possibleFlags;
+				if (exists $sidHash->{$sid}) {
+					foreach my $hashRawAccessMask (keys %{$sidHash->{$sid}}) {
+						($hashRawAccessMask & $rawAccessMask) == $rawAccessMask or next;
+						my $hashFlags = $sidHash->{$sid}->{$hashRawAccessMask};
+						if (!defined $possibleFlags) {
+							$possibleFlags = $hashFlags;
+						} else {
+							$possibleFlags->{OBJECT_INHERIT_ACE} = $possibleFlags->{OBJECT_INHERIT_ACE} || $hashFlags->{OBJECT_INHERIT_ACE} ? 1 : 0;
+							$possibleFlags->{CONTAINER_INHERIT_ACE} = $possibleFlags->{CONTAINER_INHERIT_ACE} || $hashFlags->{CONTAINER_INHERIT_ACE} ? 1 : 0;
+							$possibleFlags->{NO_PROPAGATE_ACE} = $possibleFlags->{NO_PROPAGATE_ACE} && $hashFlags->{NO_PROPAGATE_ACE} ? 1 : 0;
+							$possibleFlags->{INHERIT_ONLY_ACE} = $possibleFlags->{INHERIT_ONLY_ACE} && $hashFlags->{INHERIT_ONLY_ACE} ? 1 : 0;
+						}
+					}
+				}
+
+				unless (defined $possibleFlags &&
+								($possibleFlags->{OBJECT_INHERIT_ACE} >= $aceFlags->{OBJECT_INHERIT_ACE}) &&
+								($possibleFlags->{CONTAINER_INHERIT_ACE} >= $aceFlags->{CONTAINER_INHERIT_ACE}) &&
+								($possibleFlags->{NO_PROPAGATE_ACE} <= $aceFlags->{NO_PROPAGATE_ACE}) &&
+								($possibleFlags->{INHERIT_ONLY_ACE} <= $aceFlags->{INHERIT_ONLY_ACE})
 						) {
-					push(@{$sidHash->{$sid}}, $rawAccessMask);
+					if (defined $possibleFlags && !$aceFlags->{INHERIT_ONLY_ACE} && !$possibleFlags->{INHERIT_ONLY_ACE}) {
+						$type eq 'CONTAINER' or next;
+						$aceFlags->{INHERIT_ONLY_ACE} = 1;
+						$ace->aceFlags($aceFlags);
+					}
+					if (exists $sidHash->{$sid}->{$rawAccessMask}) {
+						my $hashFlags = $sidHash->{$sid}->{$rawAccessMask};
+						$hashFlags->{OBJECT_INHERIT_ACE} = $hashFlags->{OBJECT_INHERIT_ACE} || $aceFlags->{OBJECT_INHERIT_ACE} ? 1 : 0;
+						$hashFlags->{CONTAINER_INHERIT_ACE} = $hashFlags->{CONTAINER_INHERIT_ACE} || $aceFlags->{CONTAINER_INHERIT_ACE} ? 1 : 0;
+						$hashFlags->{NO_PROPAGATE_ACE} = $hashFlags->{NO_PROPAGATE_ACE} && $aceFlags->{NO_PROPAGATE_ACE} ? 1 : 0;
+						$hashFlags->{INHERIT_ONLY_ACE} = $hashFlags->{INHERIT_ONLY_ACE} && $aceFlags->{INHERIT_ONLY_ACE} ? 1 : 0;
+					} else {
+						$sidHash->{$sid}->{$rawAccessMask} = $aceFlags;
+					}
 					push(@newAces, $ace);
 				}
 			}
@@ -438,42 +542,25 @@ Win32::Security::ACL->reflect->addSlot(
 
 =head2 C<compare_inherited>
 
-Accepts C<$inheritable>, a C<Win32::Security::ACL> object, as a parameter.  The 
-second object should ideally be generated by a call to C<inheritable>, and 
-should be comprised solely of ACEs marked as C<INHERITED_ACE>.  The method 
-compares the ACEs on the receiver marked as inherited with the ACEs for the 
-passed object like so:
+Accepts C<$inheritable>, a C<Win32::Security::ACL> object, which should ideally 
+be generated by a call to C<inheritable> on the parent object.  It should be 
+comprised solely of ACEs with the C<INHERITED_ACE> flag.
 
-=over 4
+The method compares the ACEs on the receiver marked as inherited with the ACEs 
+for the passed object using a very simple algorithm.  First, it filters out ACEs 
+not marked as C<INHERITED_ACE> from the list of those on the receiver (these 
+will be addressed later).  Then it starts at the beginning of the two lists of 
+ACEs and removes ACEs that match.  If there are remaining ACEs, it removes 
+matching ACEs from the end.
 
-=item *
-
-Filters out ACEs not marked as C<INHERITED_ACE> from the list of those on the
-receiver.
-
-=item *
-
-It starts at the beginning of the resulting lists and removes ACEs that match.  
-This process stops at the first non-matching pair.
-
-=item *
-
-It starts at the end of the resulting lists and removes ACEs that match.  This 
-process stops at the first non-matching pair.
-
-=item *
-
-It looks for a single 'CREATOR OWNER' ACE in the remainined entries of the 
-passed object.  If it finds zero or more than one, then it skips to the next 
-step.  It then looks for potentially matching entries in the remaining entries
-for the receiver.  If it finds one and only one entry that matches on the
-C<rawtype>, C<rawflags>, and C<rawmask>, it presumes that the entry in question
-resulted from the 'CREATOR OWNER' ACE and removes both of them.  If it finds
-no entry that matches, it presumes that 'CREATOR OWNER' was occluded by one of
-the other ACEs and moves the 'CREATOR OWNER' entry from the passed object list.
-If it finds multiple matching entries, it does nothing.
-
-=back
+It deals with null SIDs in the C<$inheritable> object (implying an ACE resulting 
+from a C<CREATOR OWNER> ACE) by testing all of the SIDs in C<$self> as possible 
+standins for the null SID.  If any of these result in a perfect match, then life 
+is good.  Otherwise, the results are returned after testing with the null SID 
+unchanged.  The algorithm does B<not> currently deal with situations where there 
+are multiple C<CREATOR OWNER> permissions that were set at different times and 
+thus the bound owner for the permissions is different, and it does B<not> deal 
+with C<CREATOR GROUP>.
 
 It returns a list of anonymous arrays, the first consisting of an ACL and the 
 second consisting of an C<$IMWX> value that can be interpreted as so:
@@ -499,6 +586,11 @@ ACE explicitly assigned to object (i.e. C<INHERITED_ACE> is not set).
 
 =back
 
+Note that the C<I>, C<W>, and C<X> ACEs indicate those actually present on the 
+receiver, in the same order they are present on the receiver.  The C<I>, C<M>, 
+and C<X> ACEs indicate those that should be present, in the same order they 
+should be present.
+
 If you pass a true value for the optional second parameter C<$flat>, the 
 returned data will be flattened into a single list.  This is more difficult to 
 interact with, but because the anonymous arrays don't have to be built, it is 
@@ -506,6 +598,7 @@ faster.  In both cases, the returned values are C<clone>d to ensure the safety
 of the cached data.
 
 =cut
+
 
 Win32::Security::ACL->reflect->addSlot(
 	compareInherited => sub {
@@ -516,61 +609,84 @@ Win32::Security::ACL->reflect->addSlot(
 		my $inhrThing = $inhr ? $$inhr : '';
 
 		unless (exists $thing->{compareInherited}->{$inhrThing}) {
-			my(@retval);
+			my(@sids);
+			if ($inhr && scalar(grep {$_->sid() eq ''} $inhr->aces())) {
+				@sids = $self->sids();
+			}
+			push(@sids, undef);
 
-			my(@selfAces) = $self->aces();
-			my(@inhrAces) = $inhr ? $inhr->aces() : ();
+			foreach my $co_sid (@sids) {
+				my(@retval);
 
-			push (@retval, map {[$_, ($_->aceFlags()->{INHERITED_ACE} ? 'I' : 'X')]} @selfAces);
+				my(@selfAces) = $self->aces();
+				my(@inhrAces) = $inhr ? $inhr->aces() : ();
 
-			my(@selfIdxs) = (0..scalar(@selfAces)-1);
-			my(@inhrIdxs) = (0..scalar(@inhrAces)-1);
+				if (defined $co_sid) {
+					my $sidHash;
+					my $co_sidHash;
+					my(@newAces);
+					foreach my $ace (@inhrAces) {
+						my $sid = $ace->sid();
+						my $rawAccessMask = $ace->rawAccessMask();
+						if ($sid eq '') {
+							$ace->sid($co_sid);
+							if ( exists $sidHash->{$co_sid} && scalar(grep {($_ & $rawAccessMask) == $rawAccessMask} @{$sidHash->{$co_sid}}) ) {
+								next;
+							}
+							push(@{$co_sidHash->{$co_sid}}, $rawAccessMask);
+							push(@newAces, $ace);
+						} else {
+							if ( exists $co_sidHash->{$sid} && scalar(grep {($_ & $rawAccessMask) == $rawAccessMask} @{$co_sidHash->{$sid}}) ) {
+								my $new_flags = $ace->aceFlags();
+								if ($new_flags->{CONTAINER_INHERIT_ACE} || $new_flags->{OBJECT_INHERIT_ACE}) {
+									$new_flags->{INHERIT_ONLY_ACE} = 1;
+									$ace->aceFlags($new_flags);
+									push(@newAces, $ace);
+								}
+							} else {
+								push(@{$sidHash->{$sid}}, $rawAccessMask) if !$ace->aceFlags()->{INHERIT_ONLY_ACE};
+								push(@newAces, $ace);
+							}
+						}
+					}
+					@inhrAces = @newAces;
+				}
 
-			@selfIdxs = grep { $retval[$_]->[1] eq 'I' } @selfIdxs;
+				push (@retval, map {[$_, ($_->aceFlags()->{INHERITED_ACE} ? 'I' : 'X')]} @selfAces);
 
-			my $missIdx = scalar(@selfIdxs) ? $selfIdxs[-1] : scalar(@retval);
+				my(@selfIdxs) = (0..scalar(@selfAces)-1);
+				my(@inhrIdxs) = (0..scalar(@inhrAces)-1);
 
-			foreach my $idx (0, -1) {
-				while (@selfIdxs) {
-					if (${$selfAces[$selfIdxs[$idx]]} eq ${$inhrAces[$inhrIdxs[$idx]]}) {
-						$missIdx = $selfIdxs[$idx];
-						splice(@selfIdxs, $idx, 1);
-						splice(@inhrIdxs, $idx, 1);
-					} else {
-						last;
+				@selfIdxs = grep { $retval[$_]->[1] eq 'I' } @selfIdxs;
+
+				my $missIdx = scalar(@selfIdxs) ? $selfIdxs[-1] : scalar(@retval);
+
+				foreach my $idx (0, -1) {
+					while (@selfIdxs) {
+						if (scalar(@selfIdxs) && scalar(@inhrIdxs) && ${$selfAces[$selfIdxs[$idx]]} eq ${$inhrAces[$inhrIdxs[$idx]]}) {
+							$missIdx = $selfIdxs[$idx];
+							splice(@selfIdxs, $idx, 1);
+							splice(@inhrIdxs, $idx, 1);
+						} else {
+							last;
+						}
 					}
 				}
-			}
 
-			my $iAceFlag = Win32::Security::ACE::_AceType::->dbmAceFlags()->build_mask('INHERITED_ACE');
-			my(@inhrIdxsCo) = grep {$inhrAces[$_]->trustee() eq 'CREATOR OWNER' && $inhrAces[$_]->rawAceFlags() == $iAceFlag} @inhrIdxs;
-
-			if (scalar(@inhrIdxsCo) == 1) {
-				my $inhrAce = $inhrAces[$inhrIdxsCo[0]];
-
-				my(@selfIdxsCo) = grep {
-					$selfAces[$_]->rawAceType()  == $inhrAce->rawAceType() &&
-					$selfAces[$_]->rawAceFlags() == $inhrAce->rawAceFlags() &&
-					$selfAces[$_]->rawAccessMask()  == $inhrAce->rawAccessMask()
-				} @selfIdxs;
-
-				if (scalar(@selfIdxsCo) == 1) {
-					$missIdx = $selfIdxsCo[0];
-					@selfIdxs = grep {$_ ne $selfIdxsCo[0]} @selfIdxs;
-					@inhrIdxs = grep {$_ ne $inhrIdxsCo[0]} @inhrIdxs;
-				} elsif (scalar(@selfIdxsCo) == 0) {
-					@inhrIdxs = grep {$_ ne $inhrIdxsCo[0]} @inhrIdxs;
+				if ( defined $co_sid && ( scalar(@selfIdxs) || scalar(@inhrIdxs) ) ) {
+					next;
 				}
+
+				foreach my $i (@selfIdxs) {
+					$retval[$i]->[1] = 'W';
+					$missIdx = $i+1;
+				}
+
+				splice(@retval, $missIdx, 0, map {[$inhrAces[$_], 'M']} @inhrIdxs);
+
+				$thing->{compareInherited}->{$inhrThing} = [map {@$_} @retval];
+				last;
 			}
-
-			foreach my $i (@selfIdxs) {
-				$retval[$i]->[1] = 'W';
-				$missIdx = $i+1;
-			}
-
-			splice(@retval, $missIdx, 0, map {[$inhrAces[$_], 'M']} @inhrIdxs);
-
-			$thing->{compareInherited}->{$inhrThing} = [map {@$_} @retval];
 		}
 
 		if ($flat) {
@@ -651,7 +767,8 @@ Win32::Security::ACL->reflect->addSlot(
 =head2 C<deleteAces>
 
 Deletes all ACEs matched by the passed filter from the ACL.  The filter should 
-be an anonymous subroutine that looks for the ACEs in C<$_> like C<grep> does.
+be an anonymous subroutine that looks for the ACEs one-by-one in C<$_> and 
+returns 1 if they should be deleted.
 
 =cut
 
@@ -670,7 +787,7 @@ Win32::Security::ACL->reflect->addSlot(
 
 =head1 AUTHOR
 
-Toby Ovod-Everett, tovod-everett@alascom.att.com
+Toby Ovod-Everett, toby@ovod-everett.org
 
 =cut
 

@@ -1,6 +1,17 @@
 Revision history for Perl extension Win32::Security
 
-0.27  ??? Jan 19 2004
+0.28  Sat Mar 13 2004
+  - Fixed owner code in Win32::Security::Recursor::SE_FILE_OBJECT::PermDump
+  - Looked over PermFix.pl and tidied up some typos in the docs
+  - Added CI, OI, IO, etc. flag aliases to Win32::Security::ACE
+  - Got PermChg.pl working (albeit without owner support)
+  - Developed the first real test suites - extended.t and scripts.t
+  - Tore up and rewrote huge chunks of the inheritance checking code as a
+    result of the above.  The black box that implements permission
+    inheritance is a wiley adversary to understand.
+  - Decided to release with PermFix.pl and PermChg.pl in beta.
+
+0.27  Mon Jan 19 2004
   - Flattened Recursor into a queue based loop - no more proper recursion
   - Updated PermDump.pl to function.
   - Decided to release without PermChg.pl and PermFix.pl, which are both

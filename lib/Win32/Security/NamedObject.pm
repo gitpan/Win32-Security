@@ -11,7 +11,7 @@
 # under the same terms as Perl itself.
 #
 # For comments, questions, bugs or general interest, feel free to
-# contact Toby Ovod-Everett at tovod-everett@alascom.att.com
+# contact Toby Ovod-Everett at toby@ovod-everett.org
 #############################################################################
 
 =head1 NAME
@@ -24,7 +24,7 @@ C<Win32::Security::NamedObject> - Security manipulation for named objects
 
 	my $noFoo = Win32::Security::NamedObject->('FILE', "C:\\Foo\\foo.txt");
 	my $dacl = $noFoo->dacl();
-	print Data::Dumper->Dump([$dacl->aces()]);
+	print $dacl->dump();
 
 =head1 DESCRIPTION
 
@@ -37,11 +37,12 @@ to the DACL and Owner information - SACL access will come later.
 
 =head2 Installation instructions
 
-This installs with MakeMaker as part of C<Win32::Security>.
+This installs as part of C<Win32::Security>.
 
-To install via MakeMaker, it's the usual procedure - download from CPAN,
-extract, type "perl Makefile.PL", "nmake" then "nmake install". Don't
-do an "nmake test" because the I haven't written a test suite yet.
+To install via MakeMaker, it's the usual procedure - download from CPAN, 
+extract, type "perl Makefile.PL", "nmake", then "nmake test", then "nmake 
+install".  See C<TESTING> for more information about enabling the more extensive 
+test suite.
 
 It depends upon the other C<Win32::Security> modules.  The suite of 
 C<Win32::Security> modules depends upon:
@@ -59,14 +60,14 @@ C<Win32::Security::Recursor> uses this to allow for flexible behavior
 modification (since C<Win32::Security::Recursor> objects are really behavioral, 
 not stateful).
 
-=item C<Data::BitMask> 0.12 or later
+=item C<Data::BitMask> 0.13 or later
 
 Flexible support for manipulating masks and constants.
 
 =item C<Win32::API>
 
-Support for making Win32 API calls from Perl.  There is no C code anywhere in
-C<Win32::Security>.  C<Win32::API> is why.
+Support for making arbitrary Win32 API calls from Perl.  There is no C code 
+anywhere in C<Win32::Security>.  C<Win32::API> is why.
 
 =back
 
@@ -116,9 +117,10 @@ objects.
 Provided for your amusement and use are a few scripts that make use of the above 
 modules.  These scripts were the raison d'etre for the modules, and so it seemed 
 justifiable to ship them with it.  The scripts were located in the 
-C<lib\\Win32\\Security> directory so that they will be automatically installed
-as part of the package when deployed via PPM.  The scripts have documentation,
-but here is a quick overview of them so that you don't overlook them.
+C<lib\Win32\Security> directory so that they will be automatically installed as 
+part of the package when deployed via PPM.  The scripts have documentation (use 
+the C<-h> option), but here is a quick overview of them so that you don't 
+overlook them.
 
 =head2 C<PermDump.pl>
 
@@ -138,11 +140,26 @@ run.
 
 =head2 C<PermFix.pl>
 
+B<WARNING>: This utility is in beta.  It has B<not> undergone extensive testing 
+yet, and the test suite for this script is still under development.  I strongly 
+encourage users to use C<PermDump.pl> to take a snapshot of the existing 
+permissions before using this script in case there are problems, and to examine 
+the resulting permissions closely for signs of error.
+
 This utility is designed to do one simple task: fix problems with inherited 
-permissions.  This utility will be released shortly - I still need to do more
-testing.  Contact me directly for a pre-release version if you want it.
+permissions resulting from files and/or folders being moved between two folders 
+on the same volume that have differing inheritable permissions.
 
 =head2 C<PermChg.pl>
+
+B<WARNING>: This utility is in beta.  It has B<not> undergone extensive testing 
+yet, and the test suite for this script is still under development.  I strongly 
+encourage users to use C<PermDump.pl> to take a snapshot of the existing 
+permissions before using this script in case there are problems, and to examine 
+the resulting permissions closely for signs of error.
+
+B<NOTES>: The owner modification support in the script is not yet finished.  
+Also, the C<-file> option has not had very extensive testing.
 
 This utility is the counterpart to C<PermDump.pl>.  It allows you to change the 
 permissions.  Unlike C<X?CACLS.EXE>, this utility properly understands and 
@@ -157,11 +174,32 @@ all of the groups that John is in, but that doesn't address explicitly assigned
 permissions.  To deal with that, dump all the permissions on the volume using 
 C<PermDump.pl>.  Open the file up in Excel and sort on the Trustee.  Copy the 
 lines for John into another spreadsheet and replace the Trustee name with 
-Jane's.  Then pass that into C<PermChg.pl> with the grant option and you're 
+Jane's.  Then pass that into C<PermChg.pl> with the C<-file> option and you're 
 done!
 
-This utility will be released shortly - I still need to do more development and
-testing.  Contact me directly for a pre-release version if you want it.
+=head1 TESTING
+
+For a set of modules like Win32::Security that are intended to interact with 
+permissions, the only way to really test them is to have them interact with real 
+permissions.  Unfortunately, the only viable to do that is to modify a live 
+filesystem and see what happens.  However, I felt uncomfortable running such 
+tests as part of a default test suite, so I have disabled them by default.
+
+The tests in question are in the C<t\extended.t> and C<t\scripts.t> files.  
+They create a single directory in C<%TEMP%> named C<Win32-Security_TestDir_$$> 
+(where C<$$> is the process ID>.  They create directories and files in that test 
+directory and apply permissions to them.  The tests require C<CACLS.EXE> (which 
+should be present on all Windows 2000/XP/2003 installs) and that a usable 
+version of C<perl.exe> be in the path.
+
+The tests take a while to run (five minutes on my 1.8 GHz machine) because they 
+are very extensive (7500+ tests in C<extended.t> alone), but I strongly urge you 
+to consider running them and reporting any errors.
+
+To enable them, open C<t\extended.t> and C<t\scripts.t> and change line 11 in 
+each to read "C<< $enabled = 1; >>".  I strongly encourage testing using every 
+OS you plan to use the modules with, and using both privileged and 
+non-privileged accounts.
 
 =head1 ARCHITECTURE
 
@@ -174,7 +212,7 @@ C<Win32::Security::NamedObject> objects for the same thing!)
 =cut
 
 use Carp qw();
-use Class::Prototyped;
+use Class::Prototyped '0.98';
 use Win32::Security::ACE;
 use Win32::Security::ACL;
 use Win32::Security::Raw;
@@ -195,11 +233,12 @@ BEGIN {
 	}
 }
 
-$Win32::Security::NamedObject::VERSION = '0.27';
+$Win32::Security::NamedObject::VERSION = '0.28';
 
 =head1 Method Reference
 
 =head2 C<new>
+
 This creates a new C<Win32::Security::NamedObject> object.
 
 The various calling forms are:
@@ -282,6 +321,8 @@ C<HKEY_USERS> -> C<USERS>
 
 =back
 
+=back
+
 =cut
 
 Win32::Security::NamedObject->reflect->addSlot(
@@ -347,7 +388,7 @@ Win32::Security::NamedObject::SE_REGISTRY_KEY->reflect->addSlot(
 
 Returns the C<Data::BitMask> object for interacting with Object Types
 
-See C<Win32::Security::ACE->dbmObjectType()> for more explanation.
+See C<< Win32::Security::ACE->dbmObjectType() >> for more explanation.
 
 =cut
 
@@ -395,14 +436,15 @@ setting is maintained.
 
 Be forewarned that when setting the DACL, under Windows 2000 and more recent 
 OSes, the call to C<SetNamedSecurityInfo> results in the automatic propagation 
-of inheritable ACEs to existing child object (see 
-http://msdn.microsoft.com/library/default.asp?url=/library/en-us/security/security/setnamedsecurityinfo.asp
-for more information).  This does B<not> happen under Windows NT, and if you 
-need propagation of inheritable permissions under Windows NT, you need to write 
-your own code to implement that.  Under OSes that support automatic propagation, 
-the call to set a DACL can take a very long time to return!  Finally, any errors 
-in the inherited DACLs buried in the tree will be automatically fixed by this
-call.
+of inheritable ACEs to existing child objects (see 
+http://msdn.microsoft.com/library/default.asp?url=/library/en-us/security/securi 
+ty/setnamedsecurityinfo.asp for more information).  This does B<not> happen 
+under Windows NT, and if you need propagation of inheritable permissions under 
+Windows NT, you need to write your own code to implement that.  Under OSes that 
+support automatic propagation, the call to set a DACL can take a very long time 
+to return if there are a lot of child objects!  Finally, any errors in the 
+inherited DACLs buried in the tree will be automatically fixed by this call, 
+constrained by the privileges of the account executing the code.
 
 When setting the DACL under Windows 2000 and more recent OSes, if 
 C<UNPROTECTED_DACL_SECURITY_INFORMATION> is specified, or if the 
@@ -414,7 +456,7 @@ ACEs in the passed DACL that do not have the C<INHERITED_ACE> bit set in
 C<aceFlags>.
 
 If C<PROTECTED_DACL_SECURITY_INFORMATION> is specified, or if the 
-C<SECURITY_INFORMATION> mask is unspeciied and the object is currently blocking 
+C<SECURITY_INFORMATION> mask is unspecified and the object is currently blocking 
 inherited permissions, than the C<INHERITED_ACE> bit in C<aceFlags> for all ACEs 
 in the passed DACL is automatically cleared.  That is to say, all passed ACEs 
 are treated as explicit, independent of the C<INHERITED_ACE> bit in C<aceFlags>.
@@ -467,6 +509,50 @@ Win32::Security::NamedObject->reflect->addSlot(
 	},
 );
 
+Win32::Security::NamedObject->reflect->addSlot(
+	dacl_noprop => sub {
+		my $self = shift;
+		$self->dacl(@_);
+	}
+);
+
+Win32::Security::NamedObject::SE_FILE_OBJECT->reflect->addSlot(
+	dacl_noprop => sub {
+		my $self = shift;
+		if (scalar(@_)) {
+			my($dacl, $SecurityInfo) = @_;
+
+			my $objectType = $self->{objectType} || $self->objectType();
+
+			my($pSecurityDescriptor, $pDacl);
+
+			eval {
+				delete $self->{dacl};
+				$SecurityInfo = &Win32::Security::SECURITY_INFORMATION->build_mask($SecurityInfo);
+				$SecurityInfo = &Win32::Security::SECURITY_INFORMATION->break_mask($SecurityInfo);
+				$SecurityInfo->{DACL_SECURITY_INFORMATION} = 1;
+				$SecurityInfo = &Win32::Security::SECURITY_INFORMATION->build_mask($SecurityInfo);
+
+				$pSecurityDescriptor = Win32::Security::Raw::LocalAlloc('LPTR', 20);
+				Win32::Security::Raw::InitializeSecurityDescriptor($pSecurityDescriptor);
+				my $rawDacl = $dacl->rawAcl();
+				$pDacl = Win32::Security::Raw::LocalAlloc('LPTR', length($rawDacl));
+				Win32::Security::Raw::CopyMemory_Write($rawDacl, $pDacl);
+				Win32::Security::Raw::SetSecurityDescriptorDacl($pSecurityDescriptor, 1, $pDacl, 0);
+				Win32::Security::Raw::SetFileSecurity($self->objectName(), $SecurityInfo, $pSecurityDescriptor);
+			};
+			my $temperr = $@;
+
+			eval { Win32::Security::Raw::LocalFree($pSecurityDescriptor) if $pSecurityDescriptor };
+			eval { Win32::Security::Raw::LocalFree($pDacl) if $pDacl };
+
+			$temperr and $self->_cleansedCroak($temperr);
+
+		} else {
+			return $self->dacl(@_);
+		}
+	}
+);
 
 =head2 C<ownerTrustee>
 
@@ -504,7 +590,7 @@ Gets or sets the binary SID for the Owner of the object.  If no parameters are
 passed, it reads the Owner for the object and returns a binary SID.  To set the 
 Owner, pass the desired binary SID.  The first time this is called in set mode, 
 it will attempt to enable the C<SeRestorePrivilege>, which permits setting the 
-Owner of an object to anyone.
+Owner of an object to anyone.  If this fails, the call will C<croak>.
 
 =cut
 
@@ -564,7 +650,7 @@ Win32::Security::NamedObject->reflect->addSlot(
 
 =head2 C<control>
 
-Returns the C<Data::BitMask::break_mask> form of the Security Descript Control 
+Returns the C<Data::BitMask::break_mask> form of the Security Descriptor Control 
 (i.e. a hash containing all matching constants for the control mask of the SD).
 
 =cut
@@ -610,7 +696,7 @@ Win32::Security::NamedObject->reflect->addSlot(
 
 =head1 AUTHOR
 
-Toby Ovod-Everett, tovod-everett@alascom.att.com
+Toby Ovod-Everett, toby@ovod-everett.org
 
 =cut
 

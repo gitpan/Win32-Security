@@ -11,20 +11,16 @@
 # under the same terms as Perl itself.
 #
 # For comments, questions, bugs or general interest, feel free to
-# contact Toby Ovod-Everett at tovod-everett@alascom.att.com
+# contact Toby Ovod-Everett at toby@ovod-everett.org
 #############################################################################
 
-=head2 UnPOD this section along with the one at the end to get detailed profiling
-
-BEGIN {
-	use Class::Prototyped;
-	my $temp = Class::Prototyped->reflect->defaultAttributes;
-	$temp->{FIELD}->{profile} = 2;
-	$temp->{METHOD}->{profile} = 2;
-	Class::Prototyped->reflect->defaultAttributes($temp);
-}
-
-=cut
+#BEGIN {
+#	use Class::Prototyped;
+#	my $temp = Class::Prototyped->reflect->defaultAttributes;
+#	$temp->{FIELD}->{profile} = 2;
+#	$temp->{METHOD}->{profile} = 2;
+#	Class::Prototyped->reflect->defaultAttributes($temp);
+#}
 
 use Data::Dumper;
 use File::DosGlob 'glob';
@@ -99,16 +95,12 @@ if ($options->{performance}) {
 			scalar(keys %{Win32::Security::ACL::SE_FILE_OBJECT->_rawAclCache()}) );
 }
 
-=head2 UnPOD this section along with the one at the start to get detailed profiling
-
-my $payload_count = $recursor->{payload_count};
-foreach my $package (sort keys %{$Class::Prototyped::Mirror::PROFILE::counts}) {
-	foreach my $slotName (sort keys %{$Class::Prototyped::Mirror::PROFILE::counts->{$package}}) {
-		foreach my $caller (sort keys %{$Class::Prototyped::Mirror::PROFILE::counts->{$package}->{$slotName}}) {
-			my $call_count = $Class::Prototyped::Mirror::PROFILE::counts->{$package}->{$slotName}->{$caller};
-			print STDERR "$package\t$slotName\t$caller\t$call_count\t".sprintf("%0.3f", $call_count/$payload_count)."\n";
-		}
-	}
-}
-
-=cut
+#my $payload_count = $recursor->{payload_count};
+#foreach my $package (sort keys %{$Class::Prototyped::Mirror::PROFILE::counts}) {
+#	foreach my $slotName (sort keys %{$Class::Prototyped::Mirror::PROFILE::counts->{$package}}) {
+#		foreach my $caller (sort keys %{$Class::Prototyped::Mirror::PROFILE::counts->{$package}->{$slotName}}) {
+#			my $call_count = $Class::Prototyped::Mirror::PROFILE::counts->{$package}->{$slotName}->{$caller};
+#			print STDERR "$package\t$slotName\t$caller\t$call_count\t".sprintf("%0.3f", $call_count/$payload_count)."\n";
+#		}
+#	}
+#}
