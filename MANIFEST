@@ -1,0 +1,13 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+examples/NonAdmin.pl
+lib/Win32/Security/ACE.pm
+lib/Win32/Security/ACL.pm
+lib/Win32/Security/NamedObject.pm
+lib/Win32/Security/PermDump.pl
+lib/Win32/Security/Raw.pm
+lib/Win32/Security/Recursor.pm
+lib/Win32/Security/SID.pm
+t/ace.t
